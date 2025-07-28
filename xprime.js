@@ -109,88 +109,86 @@ function getQualityFromStream(stream) {
 }
 
 // Fetch and resolve M3U8 playlist
-async function resolveM3U8(url, sourceName = 'Unknown') {
-    try {
-        console.log(`🔍 Resolving M3U8 playlist for ${sourceName}...`);
-        console.log(`📡 URL: ${url.substring(0, 80)}...`);
-        
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: WORKING_HEADERS,
-            timeout: 15000
-        });
-        
+function resolveM3U8(url, sourceName = 'Unknown') {
+    console.log(`🔍 Resolving M3U8 playlist for ${sourceName}...`);
+    console.log(`📡 URL: ${url.substring(0, 80)}...`);
+    
+    return fetch(url, {
+        method: 'GET',
+        headers: WORKING_HEADERS,
+        timeout: 15000
+    }).then(function(response) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const content = await response.text();
-        console.log(`✅ Fetched M3U8 content (${content.length} bytes)`);
-        
-        // Check if it's a master playlist (contains #EXT-X-STREAM-INF)
-        if (content.includes('#EXT-X-STREAM-INF:')) {
-            console.log(`📋 Master playlist detected - parsing quality streams...`);
+        return response.text().then(function(content) {
+             console.log(`✅ Fetched M3U8 content (${content.length} bytes)`);
             
-            const streams = parseM3U8(content, url);
-            console.log(`🎬 Found ${streams.length} quality streams`);
-            
-            const resolvedStreams = [];
-            
-            for (const stream of streams) {
-                const quality = getQualityFromStream(stream);
+            // Check if it's a master playlist (contains #EXT-X-STREAM-INF)
+            if (content.includes('#EXT-X-STREAM-INF:')) {
+                console.log(`📋 Master playlist detected - parsing quality streams...`);
                 
-                resolvedStreams.push({
-                    source: sourceName,
-                    name: `${sourceName} [${quality}]`,
-                    url: stream.url,
-                    quality: quality,
-                    resolution: stream.resolution,
-                    bandwidth: stream.bandwidth,
-                    codecs: stream.codecs,
-                    type: 'M3U8',
-                    headers: WORKING_HEADERS,
-                    referer: 'https://xprime.tv'
+                const streams = parseM3U8(content, url);
+                console.log(`🎬 Found ${streams.length} quality streams`);
+                
+                const resolvedStreams = [];
+                
+                for (const stream of streams) {
+                    const quality = getQualityFromStream(stream);
+                    
+                    resolvedStreams.push({
+                        source: sourceName,
+                        name: `${sourceName} [${quality}]`,
+                        url: stream.url,
+                        quality: quality,
+                        resolution: stream.resolution,
+                        bandwidth: stream.bandwidth,
+                        codecs: stream.codecs,
+                        type: 'M3U8',
+                        headers: WORKING_HEADERS,
+                        referer: 'https://xprime.tv'
+                    });
+                    
+                    console.log(`  📊 ${quality} (${stream.resolution || 'Unknown resolution'}) - ${Math.round((stream.bandwidth || 0) / 1000000 * 10) / 10} Mbps`);
+                }
+                
+                // Sort by quality (highest first)
+                resolvedStreams.sort((a, b) => {
+                    const qualityOrder = { '4K': 4, '1440p': 3, '1080p': 2, '720p': 1, '480p': 0, '360p': -1, '240p': -2, 'Unknown': -3 };
+                    return (qualityOrder[b.quality] || -3) - (qualityOrder[a.quality] || -3);
                 });
                 
-                console.log(`  📊 ${quality} (${stream.resolution || 'Unknown resolution'}) - ${Math.round((stream.bandwidth || 0) / 1000000 * 10) / 10} Mbps`);
+                return {
+                    success: true,
+                    type: 'master',
+                    streams: resolvedStreams,
+                    originalUrl: url
+                };
+                
+            } else if (content.includes('#EXTINF:')) {
+                console.log(`📺 Media playlist detected - single quality stream`);
+                
+                return {
+                    success: true,
+                    type: 'media',
+                    streams: [{
+                        source: sourceName,
+                        name: sourceName,
+                        url: url,
+                        quality: 'Unknown',
+                        type: 'M3U8',
+                        headers: WORKING_HEADERS,
+                        referer: 'https://xprime.tv'
+                    }],
+                    originalUrl: url
+                };
+                
+            } else {
+                throw new Error('Invalid M3U8 content - no playlist markers found');
             }
-            
-            // Sort by quality (highest first)
-            resolvedStreams.sort((a, b) => {
-                const qualityOrder = { '4K': 4, '1440p': 3, '1080p': 2, '720p': 1, '480p': 0, '360p': -1, '240p': -2, 'Unknown': -3 };
-                return (qualityOrder[b.quality] || -3) - (qualityOrder[a.quality] || -3);
-            });
-            
-            return {
-                success: true,
-                type: 'master',
-                streams: resolvedStreams,
-                originalUrl: url
-            };
-            
-        } else if (content.includes('#EXTINF:')) {
-            console.log(`📺 Media playlist detected - single quality stream`);
-            
-            return {
-                success: true,
-                type: 'media',
-                streams: [{
-                    source: sourceName,
-                    name: sourceName,
-                    url: url,
-                    quality: 'Unknown',
-                    type: 'M3U8',
-                    headers: WORKING_HEADERS,
-                    referer: 'https://xprime.tv'
-                }],
-                originalUrl: url
-            };
-            
-        } else {
-            throw new Error('Invalid M3U8 content - no playlist markers found');
-        }
-        
-    } catch (error) {
+        });
+    }).catch(function(error) {
         console.log(`❌ Failed to resolve M3U8: ${error.message}`);
         
         return {
@@ -199,67 +197,68 @@ async function resolveM3U8(url, sourceName = 'Unknown') {
             streams: [],
             originalUrl: url
         };
-    }
+    });
 }
 
 // Resolve multiple M3U8 URLs
-async function resolveMultipleM3U8(links) {
+function resolveMultipleM3U8(links) {
     console.log(`🚀 Resolving ${links.length} M3U8 playlists in parallel...`);
     
-    const resolvePromises = links.map(async (link) => {
-        const result = await resolveM3U8(link.url, link.name);
-        return {
-            originalLink: link,
-            resolution: result
-        };
+    const resolvePromises = links.map(function(link) {
+        return resolveM3U8(link.url, link.name).then(function(result) {
+            return {
+                originalLink: link,
+                resolution: result
+            };
+        });
     });
     
-    const results = await Promise.allSettled(resolvePromises);
-    
-    const allResolvedStreams = [];
-    const failedResolutions = [];
-    
-    for (const result of results) {
-        if (result.status === 'fulfilled') {
-            const { originalLink, resolution } = result.value;
-            
-            if (resolution.success) {
-                allResolvedStreams.push(...resolution.streams);
+    return Promise.allSettled(resolvePromises).then(function(results) {
+        const allResolvedStreams = [];
+        const failedResolutions = [];
+        
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                const { originalLink, resolution } = result.value;
+                
+                if (resolution.success) {
+                    allResolvedStreams.push(...resolution.streams);
+                } else {
+                    failedResolutions.push({
+                        link: originalLink,
+                        error: resolution.error
+                    });
+                }
             } else {
                 failedResolutions.push({
-                    link: originalLink,
-                    error: resolution.error
+                    link: 'Unknown',
+                    error: result.reason.message
                 });
             }
-        } else {
-            failedResolutions.push({
-                link: 'Unknown',
-                error: result.reason.message
+        }
+        
+        console.log(`\n📊 Resolution Summary:`);
+        console.log(`✅ Successfully resolved: ${allResolvedStreams.length} streams`);
+        console.log(`❌ Failed resolutions: ${failedResolutions.length}`);
+        
+        if (failedResolutions.length > 0) {
+            console.log(`\n❌ Failed resolutions:`);
+            failedResolutions.forEach((failure, index) => {
+                console.log(`  ${index + 1}. ${failure.link.name || 'Unknown'}: ${failure.error}`);
             });
         }
-    }
-    
-    console.log(`\n📊 Resolution Summary:`);
-    console.log(`✅ Successfully resolved: ${allResolvedStreams.length} streams`);
-    console.log(`❌ Failed resolutions: ${failedResolutions.length}`);
-    
-    if (failedResolutions.length > 0) {
-        console.log(`\n❌ Failed resolutions:`);
-        failedResolutions.forEach((failure, index) => {
-            console.log(`  ${index + 1}. ${failure.link.name || 'Unknown'}: ${failure.error}`);
-        });
-    }
-    
-    return {
-        success: allResolvedStreams.length > 0,
-        streams: allResolvedStreams,
-        failed: failedResolutions,
-        summary: {
-            total: links.length,
-            resolved: allResolvedStreams.length,
-            failed: failedResolutions.length
-        }
-    };
+        
+        return {
+            success: allResolvedStreams.length > 0,
+            streams: allResolvedStreams,
+            failed: failedResolutions,
+            summary: {
+                total: links.length,
+                resolved: allResolvedStreams.length,
+                failed: failedResolutions.length
+            }
+        };
+    });
 }
 
 // Constants
@@ -295,38 +294,38 @@ function getQualityFromName(qualityStr) {
 }
 
 // Fetch latest domain from GitHub
-async function getXprimeDomain() {
+function getXprimeDomain() {
     const now = Date.now();
     if (now - domainCacheTimestamp < DOMAIN_CACHE_TTL) {
-        return xprimeDomain;
+        return Promise.resolve(xprimeDomain);
     }
 
-    try {
-        console.log('[Xprime] Fetching latest domain...');
-        const response = await fetch('https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json', {
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            if (data && data.xprime) {
-                xprimeDomain = data.xprime;
-                domainCacheTimestamp = now;
-                console.log(`[Xprime] Updated domain to: ${xprimeDomain}`);
-            }
+    console.log('[Xprime] Fetching latest domain...');
+    return fetch('https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json', {
+        method: 'GET',
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
-    } catch (error) {
+    }).then(function(response) {
+        if (response.ok) {
+            return response.json().then(function(data) {
+                if (data && data.xprime) {
+                    xprimeDomain = data.xprime;
+                    domainCacheTimestamp = now;
+                    console.log(`[Xprime] Updated domain to: ${xprimeDomain}`);
+                }
+                return xprimeDomain;
+            });
+        }
+        return xprimeDomain;
+    }).catch(function(error) {
         console.error(`[Xprime] Failed to fetch latest domain: ${error.message}`);
-    }
-
-    return xprimeDomain;
+        return xprimeDomain;
+    });
 }
 
 // Helper function to make HTTP requests
-async function makeRequest(url, options = {}) {
+function makeRequest(url, options = {}) {
     const defaultHeaders = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
@@ -334,42 +333,37 @@ async function makeRequest(url, options = {}) {
         'Accept-Encoding': 'gzip, deflate, br'
     };
 
-    try {
-        const response = await fetch(url, {
-            method: options.method || 'GET',
-            headers: { ...defaultHeaders, ...options.headers },
-            ...options
-        });
-
+    return fetch(url, {
+        method: options.method || 'GET',
+        headers: { ...defaultHeaders, ...options.headers },
+        ...options
+    }).then(function(response) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-
         return response;
-    } catch (error) {
+    }).catch(function(error) {
         console.error(`[Xprime] Request failed for ${url}: ${error.message}`);
         throw error;
-    }
+    });
 }
 
 // Server Discovery
-async function getXprimeServers(api) {
-    try {
-        console.log('[Xprime] Discovering servers...');
-        const response = await makeRequest(`${api}/servers`);
-        const data = await response.json();
-
-        if (data && data.servers) {
-            const activeServers = data.servers.filter(server => server.status === 'ok');
-            console.log(`[Xprime] Found ${activeServers.length} active servers: ${activeServers.map(s => s.name).join(', ')}`);
-            return activeServers;
-        }
-        
-        return [];
-    } catch (error) {
+function getXprimeServers(api) {
+    console.log('[Xprime] Discovering servers...');
+    return makeRequest(`${api}/servers`).then(function(response) {
+        return response.json().then(function(data) {
+            if (data && data.servers) {
+                const activeServers = data.servers.filter(server => server.status === 'ok');
+                console.log(`[Xprime] Found ${activeServers.length} active servers: ${activeServers.map(s => s.name).join(', ')}`);
+                return activeServers;
+            }
+            return [];
+        });
+    }).catch(function(error) {
         console.error(`[Xprime] Failed to fetch servers: ${error.message}`);
         return [];
-    }
+    });
 }
 
 // Build Query Parameters
@@ -466,26 +460,23 @@ function processOtherServerResponse(data, serverLabel) {
 }
 
 // Main scraping function
-async function getStreams(title, year, season, episode, type, imdbId) {
-    try {
-        console.log(`[Xprime] Searching for: ${title} (${year})`);
-        
-        const api = await getXprimeDomain();
-        const servers = await getXprimeServers(api);
-        
-        if (servers.length === 0) {
-            console.log('[Xprime] No active servers found');
-            return [];
-        }
-        
-        console.log(`[Xprime] Processing ${servers.length} servers in parallel`);
-        
-        const allLinks = [];
-        const allSubtitles = [];
-        
-        // Process servers in parallel for better performance
-        const serverPromises = servers.map(async (server) => {
-            try {
+function getStreams(title, year, season, episode, type, imdbId) {
+    console.log(`[Xprime] Searching for: ${title} (${year})`);
+    
+    return getXprimeDomain().then(function(api) {
+        return getXprimeServers(api).then(function(servers) {
+            if (servers.length === 0) {
+                console.log('[Xprime] No active servers found');
+                return [];
+            }
+            
+            console.log(`[Xprime] Processing ${servers.length} servers in parallel`);
+            
+            const allLinks = [];
+            const allSubtitles = [];
+            
+            // Process servers in parallel for better performance
+            const serverPromises = servers.map(function(server) {
                 console.log(`[Xprime] Processing server: ${server.name}`);
                 
                 const queryParams = buildQueryParams(server.name, title, year, imdbId, season, episode);
@@ -493,93 +484,124 @@ async function getStreams(title, year, season, episode, type, imdbId) {
                 
                 console.log(`[Xprime] Request URL: ${serverUrl}`);
                 
-                const response = await makeRequest(serverUrl, {
+                return makeRequest(serverUrl, {
                     headers: {
                         'Origin': api,
                         'Referer': api
                     }
+                }).then(function(response) {
+                    return response.json().then(function(data) {
+                        const serverLabel = `Xprime ${server.name.charAt(0).toUpperCase() + server.name.slice(1)}`;
+                        let result;
+                        
+                        if (server.name === 'primebox') {
+                            result = processPrimeBoxResponse(data, serverLabel);
+                        } else {
+                            result = processOtherServerResponse(data, serverLabel);
+                        }
+                        
+                        console.log(`[Xprime] Server ${server.name}: Found ${result.links.length} links, ${result.subtitles.length} subtitles`);
+                        return result;
+                    });
+                }).catch(function(error) {
+                    console.error(`[Xprime] Error on server ${server.name}: ${error.message}`);
+                    return { links: [], subtitles: [] };
                 });
-                
-                const data = await response.json();
-                const serverLabel = `Xprime ${server.name.charAt(0).toUpperCase() + server.name.slice(1)}`;
-                let result;
-                
-                if (server.name === 'primebox') {
-                    result = processPrimeBoxResponse(data, serverLabel);
-                } else {
-                    result = processOtherServerResponse(data, serverLabel);
-                }
-                
-                console.log(`[Xprime] Server ${server.name}: Found ${result.links.length} links, ${result.subtitles.length} subtitles`);
-                return result;
-                
-            } catch (error) {
-                console.error(`[Xprime] Error on server ${server.name}: ${error.message}`);
-                return { links: [], subtitles: [] };
-            }
-        });
+            });
 
-        // Wait for all server requests to complete
-        const results = await Promise.allSettled(serverPromises);
-        
-        // Process results
-        for (const result of results) {
-            if (result.status === 'fulfilled') {
-                const { links, subtitles } = result.value;
-                allLinks.push(...links);
-                allSubtitles.push(...subtitles);
-            }
-        }
-        
-        console.log(`[Xprime] Total found: ${allLinks.length} links, ${allSubtitles.length} subtitles`);
-        
-        // Separate M3U8 links from direct video links
-        const m3u8Links = allLinks.filter(link => link.type === 'M3U8');
-        const directLinks = allLinks.filter(link => link.type !== 'M3U8');
-        
-        let resolvedStreams = [];
-        
-        // Resolve M3U8 playlists to extract individual quality streams
-        if (m3u8Links.length > 0) {
-            console.log(`[Xprime] Resolving ${m3u8Links.length} M3U8 playlists...`);
-            
-            try {
-                const resolutionResult = await resolveMultipleM3U8(m3u8Links);
-                
-                if (resolutionResult.success && resolutionResult.streams.length > 0) {
-                    console.log(`[Xprime] Successfully resolved ${resolutionResult.streams.length} quality streams`);
-                    resolvedStreams = resolutionResult.streams;
-                } else {
-                    console.log(`[Xprime] M3U8 resolution failed, using master playlist URLs`);
-                    resolvedStreams = m3u8Links;
+            // Wait for all server requests to complete
+            return Promise.allSettled(serverPromises).then(function(results) {
+                // Process results
+                for (const result of results) {
+                    if (result.status === 'fulfilled') {
+                        const { links, subtitles } = result.value;
+                        allLinks.push(...links);
+                        allSubtitles.push(...subtitles);
+                    }
                 }
-            } catch (error) {
-                console.error(`[Xprime] M3U8 resolution error: ${error.message}`);
-                resolvedStreams = m3u8Links;
-            }
-        }
-        
-        // Combine resolved streams with direct links
-        const finalLinks = [...directLinks, ...resolvedStreams];
-        
-        console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
-        
-        // Format links for Nuvio
-        const formattedLinks = finalLinks.map(link => ({
-            name: link.name,
-            url: link.url,
-            quality: typeof link.quality === 'number' ? `${link.quality}p` : link.quality,
-            size: link.size || 'Unknown',
-            headers: link.headers || WORKING_HEADERS,
-            subtitles: allSubtitles
-        }));
-        
-        return formattedLinks;
-        
-    } catch (error) {
+                
+                console.log(`[Xprime] Total found: ${allLinks.length} links, ${allSubtitles.length} subtitles`);
+                
+                // Separate M3U8 links from direct video links
+                const m3u8Links = allLinks.filter(link => link.type === 'M3U8');
+                const directLinks = allLinks.filter(link => link.type !== 'M3U8');
+                
+                let resolvedStreams = [];
+                
+                // Resolve M3U8 playlists to extract individual quality streams
+                if (m3u8Links.length > 0) {
+                    console.log(`[Xprime] Resolving ${m3u8Links.length} M3U8 playlists...`);
+                    
+                    return resolveMultipleM3U8(m3u8Links).then(function(resolutionResult) {
+                        if (resolutionResult.success && resolutionResult.streams.length > 0) {
+                            console.log(`[Xprime] Successfully resolved ${resolutionResult.streams.length} quality streams`);
+                            resolvedStreams = resolutionResult.streams;
+                        } else {
+                            console.log(`[Xprime] M3U8 resolution failed, using master playlist URLs`);
+                            resolvedStreams = m3u8Links;
+                        }
+                        
+                        // Combine resolved streams with direct links
+                        const finalLinks = [...directLinks, ...resolvedStreams];
+                        
+                        console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
+                        
+                        // Format links for Nuvio
+                        const formattedLinks = finalLinks.map(link => ({
+                            name: link.name,
+                            url: link.url,
+                            quality: typeof link.quality === 'number' ? `${link.quality}p` : link.quality,
+                            size: link.size || 'Unknown',
+                            headers: link.headers || WORKING_HEADERS,
+                            subtitles: allSubtitles
+                        }));
+                        
+                        return formattedLinks;
+                    }).catch(function(error) {
+                        console.error(`[Xprime] M3U8 resolution error: ${error.message}`);
+                        resolvedStreams = m3u8Links;
+                        
+                        // Combine resolved streams with direct links
+                        const finalLinks = [...directLinks, ...resolvedStreams];
+                        
+                        console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
+                        
+                        // Format links for Nuvio
+                        const formattedLinks = finalLinks.map(link => ({
+                            name: link.name,
+                            url: link.url,
+                            quality: typeof link.quality === 'number' ? `${link.quality}p` : link.quality,
+                            size: link.size || 'Unknown',
+                            headers: link.headers || WORKING_HEADERS,
+                            subtitles: allSubtitles
+                        }));
+                        
+                        return formattedLinks;
+                    });
+                } else {
+                    // No M3U8 links, just return direct links
+                    const finalLinks = [...directLinks, ...resolvedStreams];
+                    
+                    console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
+                    
+                    // Format links for Nuvio
+                    const formattedLinks = finalLinks.map(link => ({
+                        name: link.name,
+                        url: link.url,
+                        quality: typeof link.quality === 'number' ? `${link.quality}p` : link.quality,
+                        size: link.size || 'Unknown',
+                        headers: link.headers || WORKING_HEADERS,
+                        subtitles: allSubtitles
+                    }));
+                    
+                    return formattedLinks;
+                }
+            });
+        });
+    }).catch(function(error) {
         console.error(`[Xprime] Scraping error: ${error.message}`);
         return [];
-    }
+    });
 }
 
 // Export the main function
