@@ -60,6 +60,21 @@
       "enabled": true,
       "logo": "https://image.similarpng.com/file/similarpng/very-thumbnail/2021/05/Letter-D-logo-design-template-with-geometric-shape-style-on-transparent-background-PNG.png",
       "contentLanguage": ["en"]
+    },
+    {
+      "id": "xprime",
+      "name": "Xprime",
+      "description": "High-quality movie and TV show streams from Xprime with multiple servers and parallel processing",
+      "version": "1.0.0",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "xprime.js",
+      "enabled": true,
+      "logo": "https://xprime.tv/favicon.ico",
+      "contentLanguage": ["en"]
     }
   ]
 }

@@ -97,3 +97,6 @@ test_hdrezka.js
 hdrezkaOG.js
 test_dahmermovies.js
 dahmer-movies-fetcher.js
+test_xprime.js
+m3u8-resolver.js
+xprime-scraper.js
