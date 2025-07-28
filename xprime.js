@@ -1,6 +1,10 @@
 // Xprime Scraper for Nuvio Local Scrapers
 // React Native compatible version - Standalone (no external dependencies)
 
+// TMDB API Configuration
+const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
 // Working headers for Cloudflare Workers URLs
 const WORKING_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -459,11 +463,49 @@ function processOtherServerResponse(data, serverLabel) {
     return { links, subtitles: [] };
 }
 
-// Main scraping function
-function getStreams(title, year, season, episode, type, imdbId) {
-    console.log(`[Xprime] Searching for: ${title} (${year})`);
+// Get movie/TV show details from TMDB
+function getTMDBDetails(tmdbId, mediaType) {
+    const endpoint = mediaType === 'tv' ? 'tv' : 'movie';
+    const url = `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids`;
     
-    return getXprimeDomain().then(function(api) {
+    return makeRequest(url)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`TMDB API error: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const title = mediaType === 'tv' ? data.name : data.title;
+            const releaseDate = mediaType === 'tv' ? data.first_air_date : data.release_date;
+            const year = releaseDate ? parseInt(releaseDate.split('-')[0]) : null;
+            
+            return {
+                title: title,
+                year: year,
+                imdbId: data.external_ids?.imdb_id || null
+            };
+        });
+}
+
+// Main scraping function - Updated to match Nuvio interface
+function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) {
+    console.log(`[Xprime] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}${mediaType === 'tv' ? `, S:${season}E:${episode}` : ''}`);
+    
+    // First, get movie/TV show details from TMDB
+    return getTMDBDetails(tmdbId, mediaType)
+        .then(mediaInfo => {
+            if (!mediaInfo.title) {
+                throw new Error('Could not extract title from TMDB response');
+            }
+            
+            console.log(`[Xprime] TMDB Info: "${mediaInfo.title}" (${mediaInfo.year || 'N/A'})`);
+            console.log(`[Xprime] Searching for: ${mediaInfo.title} (${mediaInfo.year})`);
+            
+            const { title, year, imdbId } = mediaInfo;
+             const type = mediaType; // Keep the original mediaType
+     
+             return getXprimeDomain().then(function(api) {
         return getXprimeServers(api).then(function(servers) {
             if (servers.length === 0) {
                 console.log('[Xprime] No active servers found');
@@ -602,6 +644,11 @@ function getStreams(title, year, season, episode, type, imdbId) {
         console.error(`[Xprime] Scraping error: ${error.message}`);
         return [];
     });
+        })
+        .catch(function(error) {
+            console.error(`[Xprime] TMDB or scraping error: ${error.message}`);
+            return [];
+        });
 }
 
 // Export the main function
