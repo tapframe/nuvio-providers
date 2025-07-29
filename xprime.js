@@ -141,9 +141,13 @@ function resolveM3U8(url, sourceName = 'Unknown') {
                 for (const stream of streams) {
                     const quality = getQualityFromStream(stream);
                     
+                    // Extract clean server name from sourceName
+                    const cleanServerName = sourceName.replace(/^XPRIME\s+/i, '').replace(/\s+-\s+.*$/, '');
+                    const formattedName = `XPRIME ${cleanServerName.charAt(0).toUpperCase() + cleanServerName.slice(1)} - ${quality}`;
+                    
                     resolvedStreams.push({
                         source: sourceName,
-                        name: `${sourceName} [${quality}]`,
+                        name: formattedName,
                         url: stream.url,
                         quality: quality,
                         resolution: stream.resolution,
@@ -173,12 +177,16 @@ function resolveM3U8(url, sourceName = 'Unknown') {
             } else if (content.includes('#EXTINF:')) {
                 console.log(`📺 Media playlist detected - single quality stream`);
                 
+                // Extract clean server name from sourceName
+                const cleanServerName = sourceName.replace(/^XPRIME\s+/i, '').replace(/\s+-\s+.*$/, '');
+                const formattedName = `XPRIME ${cleanServerName.charAt(0).toUpperCase() + cleanServerName.slice(1)} - Unknown`;
+                
                 return {
                     success: true,
                     type: 'media',
                     streams: [{
                         source: sourceName,
-                        name: sourceName,
+                        name: formattedName,
                         url: url,
                         quality: 'Unknown',
                         type: 'M3U8',
