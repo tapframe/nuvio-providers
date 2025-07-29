@@ -403,15 +403,15 @@ function processPrimeBoxResponse(data, serverLabel) {
     
     try {
         if (data.streams) {
-            // Process quality streams
-            if (data.qualities && Array.isArray(data.qualities)) {
-                data.qualities.forEach(quality => {
+            // Process quality streams - fix: use available_qualities instead of qualities
+            if (data.available_qualities && Array.isArray(data.available_qualities)) {
+                data.available_qualities.forEach(quality => {
                     const url = data.streams[quality];
                     if (url) {
                         links.push({
                             source: serverLabel,
                             name: `${serverLabel} [${quality}]`,
-                            url: url,
+                            url: url.trim(), // Remove any whitespace
                             quality: getQualityFromName(quality),
                             type: 'VIDEO',
                             headers: WORKING_HEADERS,
@@ -428,7 +428,7 @@ function processPrimeBoxResponse(data, serverLabel) {
                 if (sub.file) {
                     subtitles.push({
                         language: sub.label || 'Unknown',
-                        url: sub.file
+                        url: sub.file.trim() // Remove any whitespace
                     });
                 }
             });
