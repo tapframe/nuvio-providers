@@ -279,22 +279,33 @@ function getQualityFromName(qualityStr) {
     
     const quality = qualityStr.toLowerCase();
     const qualityMap = {
-        '2160p': 2160, '4k': 2160,
-        '1440p': 1440, '2k': 1440,
-        '1080p': 1080, 'fhd': 1080, 'full hd': 1080,
-        '720p': 720, 'hd': 720,
-        '480p': 480, 'sd': 480,
-        '360p': 360,
-        '240p': 240
+        '2160p': '4K', '4k': '4K',
+        '1440p': '1440p', '2k': '1440p',
+        '1080p': '1080p', 'fhd': '1080p', 'full hd': '1080p',
+        '720p': '720p', 'hd': '720p',
+        '480p': '480p', 'sd': '480p',
+        '360p': '360p',
+        '240p': '240p'
     };
     
     for (const [key, value] of Object.entries(qualityMap)) {
         if (quality.includes(key)) return value;
     }
     
-    // Try to extract number from string
+    // Try to extract number from string and format consistently
     const match = qualityStr.match(/(\d{3,4})[pP]?/);
-    return match ? parseInt(match[1]) : 'Unknown';
+    if (match) {
+        const resolution = parseInt(match[1]);
+        if (resolution >= 2160) return '4K';
+        if (resolution >= 1440) return '1440p';
+        if (resolution >= 1080) return '1080p';
+        if (resolution >= 720) return '720p';
+        if (resolution >= 480) return '480p';
+        if (resolution >= 360) return '360p';
+        return '240p';
+    }
+    
+    return 'Unknown';
 }
 
 // Fetch latest domain from GitHub
@@ -402,11 +413,12 @@ function processPrimeBoxResponse(data, serverLabel, serverName) {
                 data.available_qualities.forEach(quality => {
                     const url = data.streams[quality];
                     if (url) {
+                        const normalizedQuality = getQualityFromName(quality);
                         links.push({
                             source: serverLabel,
-                            name: `XPRIME ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} - ${quality}`,
+                            name: `XPRIME ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} - ${normalizedQuality}`,
                             url: url.trim(), // Remove any whitespace
-                            quality: getQualityFromName(quality),
+                            quality: normalizedQuality,
                             type: 'VIDEO',
                             headers: WORKING_HEADERS,
                             referer: 'https://xprime.tv'
@@ -440,11 +452,25 @@ function processOtherServerResponse(data, serverLabel, serverName) {
     
     try {
         if (data.url) {
+            // Try to extract quality from the URL or response data
+            let quality = 'Unknown';
+            
+            // Check if there's quality information in the response
+            if (data.quality) {
+                quality = getQualityFromName(data.quality);
+            } else {
+                // Try to extract quality from URL patterns
+                const urlQualityMatch = data.url.match(/(\d{3,4})p/i);
+                if (urlQualityMatch) {
+                    quality = getQualityFromName(urlQualityMatch[1] + 'p');
+                }
+            }
+            
             links.push({
                 source: serverLabel,
-                name: `XPRIME ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} - Unknown`,
+                name: `XPRIME ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} - ${quality}`,
                 url: data.url,
-                quality: 'Unknown',
+                quality: quality,
                 type: 'M3U8',
                 headers: WORKING_HEADERS,
                 referer: 'https://xprime.tv'
@@ -455,6 +481,50 @@ function processOtherServerResponse(data, serverLabel, serverName) {
     }
     
     return { links, subtitles: [] };
+}
+
+// Group streams by quality for better organization
+function groupStreamsByQuality(streams, subtitles) {
+    // Group streams by quality
+    const qualityGroups = {};
+    
+    streams.forEach(stream => {
+        const quality = stream.quality || 'Unknown';
+        if (!qualityGroups[quality]) {
+            qualityGroups[quality] = [];
+        }
+        qualityGroups[quality].push({
+            name: stream.name,
+            url: stream.url,
+            quality: quality,
+            size: stream.size || 'Unknown',
+            headers: stream.headers || WORKING_HEADERS,
+            subtitles: subtitles
+        });
+    });
+    
+    // Define quality order (highest to lowest)
+    const qualityOrder = ['4K', '1440p', '1080p', '720p', '480p', '360p', '240p', 'Unknown'];
+    
+    // Sort and flatten the grouped streams
+    const sortedStreams = [];
+    qualityOrder.forEach(quality => {
+        if (qualityGroups[quality]) {
+            // Sort streams within the same quality by server name
+            qualityGroups[quality].sort((a, b) => a.name.localeCompare(b.name));
+            sortedStreams.push(...qualityGroups[quality]);
+        }
+    });
+    
+    // Add any qualities not in the predefined order
+    Object.keys(qualityGroups).forEach(quality => {
+        if (!qualityOrder.includes(quality)) {
+            qualityGroups[quality].sort((a, b) => a.name.localeCompare(b.name));
+            sortedStreams.push(...qualityGroups[quality]);
+        }
+    });
+    
+    return sortedStreams;
 }
 
 // Get movie/TV show details from TMDB
@@ -582,15 +652,8 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         
                         console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
                         
-                        // Format links for Nuvio
-                        const formattedLinks = finalLinks.map(link => ({
-                            name: link.name,
-                            url: link.url,
-                            quality: typeof link.quality === 'number' ? `${link.quality}p` : link.quality,
-                            size: link.size || 'Unknown',
-                            headers: link.headers || WORKING_HEADERS,
-                            subtitles: allSubtitles
-                        }));
+                        // Group streams by quality and format for Nuvio
+                        const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles);
                         
                         return formattedLinks;
                     }).catch(function(error) {
@@ -602,15 +665,8 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         
                         console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
                         
-                        // Format links for Nuvio
-                        const formattedLinks = finalLinks.map(link => ({
-                            name: link.name,
-                            url: link.url,
-                            quality: typeof link.quality === 'number' ? `${link.quality}p` : link.quality,
-                            size: link.size || 'Unknown',
-                            headers: link.headers || WORKING_HEADERS,
-                            subtitles: allSubtitles
-                        }));
+                        // Group streams by quality and format for Nuvio
+                        const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles);
                         
                         return formattedLinks;
                     });
@@ -620,15 +676,8 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                     
                     console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
                     
-                    // Format links for Nuvio
-                    const formattedLinks = finalLinks.map(link => ({
-                        name: link.name,
-                        url: link.url,
-                        quality: typeof link.quality === 'number' ? `${link.quality}p` : link.quality,
-                        size: link.size || 'Unknown',
-                        headers: link.headers || WORKING_HEADERS,
-                        subtitles: allSubtitles
-                    }));
+                    // Group streams by quality and format for Nuvio
+                    const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles);
                     
                     return formattedLinks;
                 }
