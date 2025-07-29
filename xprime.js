@@ -492,7 +492,19 @@ function processOtherServerResponse(data, serverLabel, serverName) {
 }
 
 // Group streams by quality for better organization
-function groupStreamsByQuality(streams, subtitles) {
+function groupStreamsByQuality(streams, subtitles, mediaInfo = {}) {
+    // Create media title with details
+    let mediaTitle = '';
+    if (mediaInfo.title) {
+        if (mediaInfo.mediaType === 'tv' && mediaInfo.season && mediaInfo.episode) {
+            mediaTitle = `${mediaInfo.title} S${String(mediaInfo.season).padStart(2, '0')}E${String(mediaInfo.episode).padStart(2, '0')}`;
+        } else if (mediaInfo.year) {
+            mediaTitle = `${mediaInfo.title} (${mediaInfo.year})`;
+        } else {
+            mediaTitle = mediaInfo.title;
+        }
+    }
+    
     // Group streams by quality
     const qualityGroups = {};
     
@@ -501,8 +513,10 @@ function groupStreamsByQuality(streams, subtitles) {
         if (!qualityGroups[quality]) {
             qualityGroups[quality] = [];
         }
+        
         qualityGroups[quality].push({
             name: stream.name,
+            title: mediaTitle || '',
             url: stream.url,
             quality: quality,
             size: stream.size || 'Unknown',
@@ -661,7 +675,14 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
                         
                         // Group streams by quality and format for Nuvio
-                        const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles);
+                        const mediaInfoForGrouping = {
+                            title: title,
+                            year: year,
+                            mediaType: mediaType,
+                            season: season,
+                            episode: episode
+                        };
+                        const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles, mediaInfoForGrouping);
                         
                         return formattedLinks;
                     }).catch(function(error) {
@@ -674,7 +695,14 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
                         
                         // Group streams by quality and format for Nuvio
-                        const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles);
+                        const mediaInfoForGrouping = {
+                            title: title,
+                            year: year,
+                            mediaType: mediaType,
+                            season: season,
+                            episode: episode
+                        };
+                        const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles, mediaInfoForGrouping);
                         
                         return formattedLinks;
                     });
@@ -685,7 +713,14 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                     console.log(`[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`);
                     
                     // Group streams by quality and format for Nuvio
-                    const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles);
+                    const mediaInfoForGrouping = {
+                        title: title,
+                        year: year,
+                        mediaType: mediaType,
+                        season: season,
+                        episode: episode
+                    };
+                    const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles, mediaInfoForGrouping);
                     
                     return formattedLinks;
                 }
