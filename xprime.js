@@ -352,22 +352,16 @@ function makeRequest(url, options = {}) {
     });
 }
 
-// Server Discovery
+// Hardcoded Server List
 function getXprimeServers(api) {
-    console.log('[Xprime] Discovering servers...');
-    return makeRequest(`${api}/servers`).then(function(response) {
-        return response.json().then(function(data) {
-            if (data && data.servers) {
-                const activeServers = data.servers.filter(server => server.status === 'ok');
-                console.log(`[Xprime] Found ${activeServers.length} active servers: ${activeServers.map(s => s.name).join(', ')}`);
-                return activeServers;
-            }
-            return [];
-        });
-    }).catch(function(error) {
-        console.error(`[Xprime] Failed to fetch servers: ${error.message}`);
-        return [];
-    });
+    console.log('[Xprime] Using hardcoded servers...');
+    const hardcodedServers = [
+        { name: 'primebox', status: 'ok' },
+        { name: 'phoenix', status: 'ok' },
+        { name: 'fox', status: 'ok' }
+    ];
+    console.log(`[Xprime] Using ${hardcodedServers.length} hardcoded servers: ${hardcodedServers.map(s => s.name).join(', ')}`);
+    return Promise.resolve(hardcodedServers);
 }
 
 // Build Query Parameters
@@ -397,7 +391,7 @@ function buildQueryParams(serverName, title, year, id, season, episode) {
 }
 
 // Process PrimeBox Response
-function processPrimeBoxResponse(data, serverLabel) {
+function processPrimeBoxResponse(data, serverLabel, serverName) {
     const links = [];
     const subtitles = [];
     
@@ -410,7 +404,7 @@ function processPrimeBoxResponse(data, serverLabel) {
                     if (url) {
                         links.push({
                             source: serverLabel,
-                            name: `${serverLabel} [${quality}]`,
+                            name: `XPRIME ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} - ${quality}`,
                             url: url.trim(), // Remove any whitespace
                             quality: getQualityFromName(quality),
                             type: 'VIDEO',
@@ -441,14 +435,14 @@ function processPrimeBoxResponse(data, serverLabel) {
 }
 
 // Process Other Server Response
-function processOtherServerResponse(data, serverLabel) {
+function processOtherServerResponse(data, serverLabel, serverName) {
     const links = [];
     
     try {
         if (data.url) {
             links.push({
                 source: serverLabel,
-                name: serverLabel,
+                name: `XPRIME ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} - Unknown`,
                 url: data.url,
                 quality: 'Unknown',
                 type: 'M3U8',
@@ -537,9 +531,9 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         let result;
                         
                         if (server.name === 'primebox') {
-                            result = processPrimeBoxResponse(data, serverLabel);
+                            result = processPrimeBoxResponse(data, serverLabel, server.name);
                         } else {
-                            result = processOtherServerResponse(data, serverLabel);
+                            result = processOtherServerResponse(data, serverLabel, server.name);
                         }
                         
                         console.log(`[Xprime] Server ${server.name}: Found ${result.links.length} links, ${result.subtitles.length} subtitles`);
