@@ -684,6 +684,11 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         };
                         const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles, mediaInfoForGrouping);
                         
+                        // Add provider identifier for header detection
+                        formattedLinks.forEach(link => {
+                            link.provider = 'xprime';
+                        });
+                        
                         return formattedLinks;
                     }).catch(function(error) {
                         console.error(`[Xprime] M3U8 resolution error: ${error.message}`);
@@ -704,6 +709,11 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         };
                         const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles, mediaInfoForGrouping);
                         
+                        // Add provider identifier for header detection
+                        formattedLinks.forEach(link => {
+                            link.provider = 'xprime';
+                        });
+                        
                         return formattedLinks;
                     });
                 } else {
@@ -721,6 +731,11 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         episode: episode
                     };
                     const formattedLinks = groupStreamsByQuality(finalLinks, allSubtitles, mediaInfoForGrouping);
+                    
+                    // Add provider identifier for header detection
+                    formattedLinks.forEach(link => {
+                        link.provider = 'xprime';
+                    });
                     
                     return formattedLinks;
                 }
