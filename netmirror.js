@@ -77,8 +77,16 @@ async function bypass() {
     const setCookieHeader = verifyResponse.headers.get('set-cookie');
     console.log('[NetMirror] Set-Cookie header:', setCookieHeader);
     
-    if (setCookieHeader && typeof setCookieHeader === 'string') {
-      const cookieMatch = setCookieHeader.match(/t_hash_t=([^;]+)/);
+    // Handle both string and array formats
+    let cookieString = '';
+    if (Array.isArray(setCookieHeader)) {
+      cookieString = setCookieHeader.join('; ');
+    } else if (typeof setCookieHeader === 'string') {
+      cookieString = setCookieHeader;
+    }
+    
+    if (cookieString) {
+      const cookieMatch = cookieString.match(/t_hash_t=([^;]+)/);
       if (cookieMatch) {
         cookieValue = cookieMatch[1];
         cookieTimestamp = now;
