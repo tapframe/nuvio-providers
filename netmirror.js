@@ -66,8 +66,9 @@ function bypass() {
             const setCookieHeader = response.headers.get('set-cookie');
             let extractedCookie = null;
             
-            if (setCookieHeader) {
-                const cookieMatch = setCookieHeader.match(/t_hash_t=([^;]+)/);
+            if (setCookieHeader && (typeof setCookieHeader === 'string' || Array.isArray(setCookieHeader))) {
+                const cookieString = Array.isArray(setCookieHeader) ? setCookieHeader.join('; ') : setCookieHeader;
+                const cookieMatch = cookieString.match(/t_hash_t=([^;]+)/);
                 if (cookieMatch) {
                     extractedCookie = cookieMatch[1];
                 }
