@@ -634,7 +634,17 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
                                     if (labelQualityMatch) {
                                         quality = labelQualityMatch[1];
                                     } else {
-                                        quality = source.quality;
+                                        // Normalize quality labels
+                                        const normalizedQuality = source.quality.toLowerCase();
+                                        if (normalizedQuality.includes('full hd') || normalizedQuality.includes('1080')) {
+                                            quality = '1080p';
+                                        } else if (normalizedQuality.includes('hd') || normalizedQuality.includes('720')) {
+                                            quality = '720p';
+                                        } else if (normalizedQuality.includes('480')) {
+                                            quality = '480p';
+                                        } else {
+                                            quality = source.quality;
+                                        }
                                     }
                                 } else if (source.url.includes('720p')) {
                                     quality = '720p';
@@ -667,6 +677,27 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
                                         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
                                     }
                                 };
+                            });
+                            
+                            // Sort streams: Auto quality first, then by quality (highest first)
+                            streams.sort((a, b) => {
+                                // Auto quality always comes first
+                                if (a.quality.toLowerCase() === 'auto' && b.quality.toLowerCase() !== 'auto') {
+                                    return -1;
+                                }
+                                if (b.quality.toLowerCase() === 'auto' && a.quality.toLowerCase() !== 'auto') {
+                                    return 1;
+                                }
+                                
+                                // If both are Auto or neither is Auto, sort by quality
+                                const parseQuality = (quality) => {
+                                    const match = quality.match(/(\d{3,4})p/i);
+                                    return match ? parseInt(match[1], 10) : 0;
+                                };
+                                
+                                const qualityA = parseQuality(a.quality);
+                                const qualityB = parseQuality(b.quality);
+                                return qualityB - qualityA; // Highest quality first
                             });
                             
                             console.log(`[NetMirror] Successfully processed ${streams.length} streams from ${platform}`);
