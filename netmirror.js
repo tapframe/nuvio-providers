@@ -314,33 +314,17 @@ async function getStreamingLinks(contentId, title, platform = 'netflix') {
       }
     }
     
-    // Extract quality-specific playlist URLs from the first HLS source
-    if (sources.length > 0) {
-      console.log('[NetMirror] Extracting quality-specific playlist URLs...');
-      const qualityPlaylists = await extractQualityPlaylists(sources[0].url);
-      
-      // Replace the master playlist sources with quality-specific ones
-      if (qualityPlaylists.length > 0) {
-        sources.length = 0; // Clear existing sources
-        for (const playlist of qualityPlaylists) {
-          sources.push({
-            url: playlist.url,
-            quality: playlist.quality,
-            type: 'application/vnd.apple.mpegurl',
-            resolution: playlist.resolution,
-            bandwidth: playlist.bandwidth,
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-              'Referer': 'https://net2025.cc/',
-              'Origin': 'https://net2025.cc',
-              'Accept': 'application/vnd.apple.mpegurl, video/mp4, */*'
-            }
-          });
-        }
-      }
+    // Add headers to master playlist sources for player compatibility
+    for (const source of sources) {
+      source.headers = {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        'Referer': 'https://net2025.cc/',
+        'Origin': 'https://net2025.cc',
+        'Accept': 'application/vnd.apple.mpegurl, video/mp4, */*'
+      };
     }
     
-    console.log(`[NetMirror] Found ${sources.length} quality-specific streaming sources and ${subtitles.length} subtitle tracks`);
+    console.log(`[NetMirror] Found ${sources.length} master playlist streaming sources and ${subtitles.length} subtitle tracks`);
     
     return { sources, subtitles };
   } catch (error) {
