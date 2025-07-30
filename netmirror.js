@@ -75,14 +75,20 @@ async function bypass() {
 
     // Extract cookie from response headers
     const setCookieHeader = verifyResponse.headers.get('set-cookie');
-    if (setCookieHeader) {
+    console.log('[NetMirror] Set-Cookie header:', setCookieHeader);
+    
+    if (setCookieHeader && typeof setCookieHeader === 'string') {
       const cookieMatch = setCookieHeader.match(/t_hash_t=([^;]+)/);
       if (cookieMatch) {
         cookieValue = cookieMatch[1];
         cookieTimestamp = now;
         console.log('[NetMirror] Authentication successful');
         return cookieValue;
+      } else {
+        console.log('[NetMirror] t_hash_t cookie not found in header');
       }
+    } else {
+      console.log('[NetMirror] No valid set-cookie header found');
     }
 
     throw new Error('Failed to extract authentication cookie');
