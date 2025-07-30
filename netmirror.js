@@ -396,21 +396,30 @@ async function getStreams(tmdbId, mediaType = 'movie', season = null, episode = 
         ? `${title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
         : year ? `${title} (${year})` : title;
       
-      streams.push({
-        name: `NetMirror - ${source.quality}`,
-        title: mediaTitle,
-        url: source.url,
-        quality: source.quality,
-        size: 'Unknown',
-        fileName: `${title.replace(/[^a-zA-Z0-9]/g, '_')}_${source.quality}.m3u8`,
-        type: 'M3U8',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-          'Referer': 'https://net2025.cc/',
-          'Origin': 'https://net2025.cc',
-          'Accept': 'application/vnd.apple.mpegurl, video/mp4, */*'
-        }
-      });
+      // Platform-specific URL handling
+          let finalUrl = source.url;
+          
+          // For iOS, we need to provide alternative URLs since the CDN has compatibility issues
+          // For now, keep original URLs for Android compatibility
+          // TODO: Implement iOS-specific URL conversion or alternative CDN mapping
+          
+          console.log(`[NetMirror] Using original URL for compatibility: ${source.url}`);
+          
+          streams.push({
+            name: `NetMirror - ${source.quality}`,
+            title: mediaTitle,
+            url: finalUrl,
+            quality: source.quality,
+            size: 'Unknown',
+            fileName: `${title.replace(/[^a-zA-Z0-9]/g, '_')}_${source.quality}.m3u8`,
+            type: 'M3U8',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+              'Referer': 'https://net2025.cc/',
+              'Origin': 'https://net2025.cc',
+              'Accept': 'application/vnd.apple.mpegurl, video/mp4, */*'
+            }
+          });
     }
     
     // Sort by quality (highest first)
