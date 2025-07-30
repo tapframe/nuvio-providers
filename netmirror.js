@@ -4,7 +4,7 @@
 // Constants
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-const MAIN_URL = 'https://net2025.cc';
+const MAIN_URL = 'https://a.net2025.cc';
 
 // Global variables for authentication
 let cookieValue = '';
