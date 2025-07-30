@@ -80,7 +80,7 @@
       "id": "netmirror",
       "name": "NetMirror",
       "description": "High-quality streaming links from Netflix, Prime Video, and Disney+ mirrors via net2025.cc",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": "Nuvio Team",
       "supportedTypes": [
         "movie",
