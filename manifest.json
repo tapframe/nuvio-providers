@@ -75,6 +75,21 @@
       "enabled": true,
       "logo": "https://xprime.tv/favicon/favicon.ico",
       "contentLanguage": ["en"]
+    },
+    {
+      "id": "netmirror",
+      "name": "NetMirror",
+      "description": "High-quality streaming links from Netflix, Prime Video, and Disney+ mirrors via net2025.cc",
+      "version": "1.0.0",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "netmirror.js",
+      "enabled": true,
+      "logo": "https://net2025.cc/favicon.ico",
+      "contentLanguage": ["en"]
     }
   ]
 }
