@@ -90,6 +90,21 @@
       "enabled": true,
       "logo": "https://net2025.cc/favicon.ico",
       "contentLanguage": ["en"]
+    },
+    {
+      "id": "dvdplay",
+      "name": "DVDPlay",
+      "description": "High-quality movie and TV show streams from DVDPlay Forum with HubCloud extraction",
+      "version": "1.0.0",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "dvdplay.js",
+      "enabled": true,
+      "logo": "https://dvdplay.forum/favicon.ico",
+      "contentLanguage": ["en"]
     }
   ]
 }
