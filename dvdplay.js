@@ -590,6 +590,32 @@ function extractSize(text) {
     return match ? match[1] : null;
 }
 
+// Validate if a video URL is working (not 404 or broken)
+async function validateVideoUrl(url, timeout = 10000) {
+    try {
+        console.log(`[DVDPlay] Validating URL: ${url.substring(0, 100)}...`);
+        const response = await fetch(url, {
+            method: 'HEAD',
+            headers: {
+                'Range': 'bytes=0-1',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            },
+            signal: AbortSignal.timeout(timeout)
+        });
+
+        if (response.ok || response.status === 206) {
+            console.log(`[DVDPlay] ✓ URL validation successful (${response.status})`);
+            return true;
+        } else {
+            console.log(`[DVDPlay] ✗ URL validation failed with status: ${response.status}`);
+            return false;
+        }
+    } catch (error) {
+        console.log(`[DVDPlay] ✗ URL validation failed: ${error.message}`);
+        return false;
+    }
+}
+
 // Main function that Nuvio will call
 async function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = null) {
     console.log(`[DVDPlay] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}`);
@@ -636,15 +662,40 @@ async function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episode
         // 6. Remove duplicates based on URL
         const uniqueStreams = Array.from(new Map(allStreams.map(stream => [stream.url, stream])).values());
 
-        // 7. Sort by quality (highest first)
-        uniqueStreams.sort((a, b) => {
+        // 7. Validate URLs in parallel (optional, can be disabled for speed)
+        console.log(`[DVDPlay] Validating ${uniqueStreams.length} stream URLs...`);
+        const validationPromises = uniqueStreams.map(async (stream) => {
+            try {
+                // Check if URL validation is enabled (can be disabled for faster results)
+                if (typeof URL_VALIDATION_ENABLED !== 'undefined' && !URL_VALIDATION_ENABLED) {
+                    console.log(`[DVDPlay] ✓ URL validation disabled, accepting stream`);
+                    return stream;
+                }
+                
+                const isValid = await validateVideoUrl(stream.url, 8000); // 8 second timeout
+                if (isValid) {
+                    return stream;
+                } else {
+                    console.log(`[DVDPlay] ✗ Filtering out invalid stream: ${stream.name}`);
+                    return null;
+                }
+            } catch (error) {
+                console.log(`[DVDPlay] ✗ Validation error for ${stream.name}: ${error.message}`);
+                return null; // Filter out streams that fail validation
+            }
+        });
+
+        const validatedStreams = (await Promise.all(validationPromises)).filter(stream => stream !== null);
+
+        // 8. Sort by quality (highest first)
+        validatedStreams.sort((a, b) => {
             const qualityA = parseQualityForSort(a.quality);
             const qualityB = parseQualityForSort(b.quality);
             return qualityB - qualityA;
         });
 
-        console.log(`[DVDPlay] Successfully processed ${uniqueStreams.length} streams`);
-        return uniqueStreams;
+        console.log(`[DVDPlay] Successfully processed ${validatedStreams.length} valid streams (${uniqueStreams.length - validatedStreams.length} filtered out)`);
+        return validatedStreams;
 
     } catch (error) {
         console.error(`[DVDPlay] Error in getStreams: ${error.message}`);
