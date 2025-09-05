@@ -534,7 +534,9 @@ function processDownloadLink(downloadPageUrl) {
         .then(response => response.text())
         .then(downloadPageHtml => {
             const hubCloudUrls = [];
-            const hubCloudRegex = /<a href="(https?:\/\/hubcloud\.one[^"]+)"/g;
+            
+            // Only look for HubCloud links
+            const hubCloudRegex = /<a href="(https?:\/\/hubcloud\.[^"]+)"/g;
             let hubCloudMatch;
             
             while ((hubCloudMatch = hubCloudRegex.exec(downloadPageHtml)) !== null) {
@@ -585,6 +587,30 @@ function extractQuality(text) {
 function extractSize(text) {
     const match = (text || '').match(/\[([^\]]+)\]/);
     return match ? match[1] : null;
+}
+
+// Get service name from URL
+function getServiceName(url) {
+    try {
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname.toLowerCase();
+        
+        if (hostname.includes('gofile')) return 'GoFile';
+        if (hostname.includes('gdflix')) return 'GdFlix';
+        if (hostname.includes('filepress')) return 'FilePress';
+        if (hostname.includes('fpgo')) return 'FpGo';
+        if (hostname.includes('hubcloud')) return 'HubCloud';
+        
+        // Extract domain name for unknown services
+        const parts = hostname.split('.');
+        if (parts.length >= 2) {
+            return parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
+        }
+        
+        return 'Unknown Service';
+    } catch (error) {
+        return 'Unknown Service';
+    }
 }
 
 // Validate if a video URL is working (not 404 or broken)
@@ -709,7 +735,8 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
 
 // Export for React Native
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { getStreams };
+    module.exports = { getStreams, extractHubCloudLinks };
 } else {
     global.getStreams = getStreams;
+    global.extractHubCloudLinks = extractHubCloudLinks;
 }
