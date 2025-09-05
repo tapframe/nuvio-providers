@@ -109,7 +109,7 @@ function makeRequest(url, options = {}) {
 
 function getIndexQuality(str) {
     const match = (str || '').match(/(\d{3,4})[pP]/);
-    return match ? parseInt(match[1]) : 2160;
+    return match ? parseInt(match[1]) : null; // Don't assume quality if not found
 }
 
 function decodeFilename(filename) {
@@ -245,7 +245,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
             const quality = getIndexQuality(header);
             const headerDetails = cleanTitle(header);
             
-            const qualityLabel = quality ? ` - ${quality}p` : '';
+            const qualityLabel = quality ? ` - ${quality}p` : ' - Unknown';
             
             const downloadButtons = $('div.card-body h2 a.btn');
             
@@ -273,7 +273,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - FSL Server${qualityLabel}`,
                                     title: finalTitle,
                                     url: link,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -289,7 +289,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - FSL Server${qualityLabel}`,
                                     title: finalTitle,
                                     url: link,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -307,7 +307,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - HubCloud${qualityLabel}`,
                                     title: finalTitle,
                                     url: link,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -323,7 +323,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - HubCloud${qualityLabel}`,
                                     title: finalTitle,
                                     url: link,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -348,7 +348,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - Pixeldrain${qualityLabel}`,
                                     title: finalTitle,
                                     url: convertedLink,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -364,7 +364,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - Pixeldrain${qualityLabel}`,
                                     title: finalTitle,
                                     url: convertedLink,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -382,7 +382,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - S3 Server${qualityLabel}`,
                                     title: finalTitle,
                                     url: link,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -398,7 +398,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - S3 Server${qualityLabel}`,
                                     title: finalTitle,
                                     url: link,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -416,7 +416,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - HubCloud${qualityLabel}`,
                                     title: finalTitle,
                                     url: link,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
@@ -432,7 +432,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     name: `DVDPlay - HubCloud${qualityLabel}`,
                                     title: finalTitle,
                                     url: link,
-                                    quality: quality + 'p',
+                                    quality: quality ? quality + 'p' : 'Unknown',
                                     size: size,
                                     type: 'direct'
                                 });
