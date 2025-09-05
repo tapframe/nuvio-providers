@@ -4,23 +4,6 @@
 const cheerio = require('cheerio-without-node-native');
 console.log('[4KHDHub] Using cheerio-without-node-native for DOM parsing');
 
-// Import shared HubCloud extractor
-const { 
-    extractHubCloudLinks, 
-    validateVideoUrl, 
-    getIndexQuality, 
-    cleanTitle, 
-    decodeFilename, 
-    getFilenameFromUrl,
-    getRedirectLinks,
-    resolveBuzzServer,
-    resolveTenGbps,
-    makeRequest,
-    base64Decode,
-    base64Encode,
-    rot13
-} = require('../extractors/hubcloud');
-
 // Constants
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const DOMAINS_URL = 'https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json';
@@ -37,8 +20,26 @@ const DEFAULT_HEADERS = {
   'Connection': 'keep-alive'
 };
 
-// Helper: HTTP (override with 4KHDHub specific headers)
-function makeRequest4KHDHub(url, options = {}) {
+// Polyfill atob/btoa for Node test environments if missing (kept lightweight, no imports)
+if (typeof atob === 'undefined') {
+  try {
+    // eslint-disable-next-line no-undef
+    global.atob = function (b64) { return Buffer.from(b64, 'base64').toString('binary'); };
+  } catch (e) {
+    // ignore for RN
+  }
+}
+if (typeof btoa === 'undefined') {
+  try {
+    // eslint-disable-next-line no-undef
+    global.btoa = function (str) { return Buffer.from(str, 'binary').toString('base64'); };
+  } catch (e) {
+    // ignore for RN
+  }
+}
+
+// Helper: HTTP
+function makeRequest(url, options = {}) {
   return fetch(url, {
     ...options,
     headers: {
@@ -51,6 +52,80 @@ function makeRequest4KHDHub(url, options = {}) {
     }
     return response;
   });
+}
+
+// Base64 and misc helpers (RN-safe)
+function base64Decode(str) {
+  try {
+    // Convert base64 -> binary string -> UTF-8
+    // escape/unescape is deprecated but works in RN environments for this use case
+    // eslint-disable-next-line no-undef
+    return decodeURIComponent(escape(atob(str)));
+  } catch (e) {
+    return '';
+  }
+}
+
+function base64Encode(str) {
+  try {
+    // eslint-disable-next-line no-undef
+    return btoa(unescape(encodeURIComponent(str)));
+  } catch (e) {
+    return '';
+  }
+}
+
+function rot13(str) {
+  return (str || '').replace(/[A-Za-z]/g, function (char) {
+    var start = char <= 'Z' ? 65 : 97;
+    return String.fromCharCode(((char.charCodeAt(0) - start + 13) % 26) + start);
+  });
+}
+
+function decodeFilename(filename) {
+  if (!filename) return filename;
+  try {
+    var decoded = filename;
+    if (decoded.indexOf('UTF-8') === 0) {
+      decoded = decoded.substring(5);
+    }
+    return decodeURIComponent(decoded);
+  } catch (e) {
+    return filename;
+  }
+}
+
+function getIndexQuality(str) {
+  var match = (str || '').match(/(\d{3,4})[pP]/);
+  return match ? parseInt(match[1], 10) : 2160;
+}
+
+function cleanTitle(title) {
+  var decodedTitle = decodeFilename(title || '');
+  var parts = decodedTitle.split(/[.\-_]/);
+  var qualityTags = ['WEBRip','WEB-DL','WEB','BluRay','HDRip','DVDRip','HDTV','CAM','TS','R5','DVDScr','BRRip','BDRip','DVD','PDTV','HD'];
+  var audioTags = ['AAC','AC3','DTS','MP3','FLAC','DD5','EAC3','Atmos'];
+  var subTags = ['ESub','ESubs','Subs','MultiSub','NoSub','EnglishSub','HindiSub'];
+  var codecTags = ['x264','x265','H264','HEVC','AVC'];
+
+  var startIndex = parts.findIndex(function (part) {
+    return qualityTags.some(function (tag) { return part.toLowerCase().indexOf(tag.toLowerCase()) !== -1; });
+  });
+
+  var endIndex = parts.map(function (part, index) {
+    var hasTag = subTags.concat(audioTags).concat(codecTags).some(function (tag) {
+      return part.toLowerCase().indexOf(tag.toLowerCase()) !== -1;
+    });
+    return hasTag ? index : -1;
+  }).filter(function (i) { return i !== -1; }).pop() || -1;
+
+  if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
+    return parts.slice(startIndex, endIndex + 1).join('.');
+  } else if (startIndex !== -1) {
+    return parts.slice(startIndex).join('.');
+  } else {
+    return parts.slice(-3).join('.');
+  }
 }
 
 function normalizeTitle(title) {
@@ -99,16 +174,91 @@ function findBestMatch(results, query) {
   return scored[0].item;
 }
 
+// URL utils – replicate UHDMovies validation style
+function validateVideoUrl(url, timeout) {
+  console.log('[4KHDHub] Validating URL: ' + (url.substring(0, 100)) + '...');
+  return fetch(url, {
+    method: 'HEAD',
+    headers: {
+      'Range': 'bytes=0-1',
+      'User-Agent': DEFAULT_HEADERS['User-Agent']
+    }
+  }).then(function (response) {
+    if (response.ok || response.status === 206) {
+      console.log('[4KHDHub] ✓ URL validation successful (' + response.status + ')');
+      return true;
+    } else {
+      console.log('[4KHDHub] ✗ URL validation failed with status: ' + response.status);
+      return false;
+    }
+  }).catch(function (error) {
+    console.log('[4KHDHub] ✗ URL validation failed: ' + (error && error.message));
+    return false;
+  });
+}
+
+function getFilenameFromUrl(url) {
+  try {
+    return fetch(url, {
+      method: 'HEAD',
+      headers: { 'User-Agent': DEFAULT_HEADERS['User-Agent'] }
+    }).then(function (res) {
+      var cd = res.headers.get('content-disposition');
+      var filename = null;
+      if (cd) {
+        var match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+        if (match && match[1]) filename = (match[1] || '').replace(/["']/g, '');
+      }
+      if (!filename) {
+        try {
+          var uo = new URL(url);
+          filename = uo.pathname.split('/').pop() || '';
+          if (filename && filename.indexOf('.') !== -1) filename = filename.replace(/\.[^.]+$/, '');
+        } catch (e) { /* ignore */ }
+      }
+      var decoded = decodeFilename(filename || '');
+      return decoded || null;
+    }).catch(function () { return null; });
+  } catch (e) {
+    return Promise.resolve(null);
+  }
+}
 
 // Domains
 function getDomains() {
   if (domainsCache) return Promise.resolve(domainsCache);
-  return makeRequest4KHDHub(DOMAINS_URL).then(function (res) { return res.json(); }).then(function (data) {
+  return makeRequest(DOMAINS_URL).then(function (res) { return res.json(); }).then(function (data) {
     domainsCache = data;
     return domainsCache;
   }).catch(function () { return null; });
 }
 
+// Resolve redirect link style used by 4KHDHub
+function getRedirectLinks(url) {
+  return makeRequest(url).then(function (res) { return res.text(); }).then(function (html) {
+    var regex = /s\('o','([A-Za-z0-9+/=]+)'|ck\('_wp_http_\d+','([^']+)'/g;
+    var combined = '';
+    var m;
+    while ((m = regex.exec(html)) !== null) {
+      var val = m[1] || m[2];
+      if (val) combined += val;
+    }
+    try {
+      var decoded = base64Decode(rot13(base64Decode(base64Decode(combined))));
+      var obj = JSON.parse(decoded);
+      var encodedurl = base64Decode(obj.o || '').trim();
+      var data = base64Decode(obj.data || '').trim();
+      var blog = (obj.blog_url || '').trim();
+      if (encodedurl) return encodedurl;
+      if (blog && data) {
+        return makeRequest(blog + '?re=' + data).then(function (r) { return r.text(); }).then(function (txt) { return (txt || '').trim(); }).catch(function () { return ''; });
+      }
+      return '';
+    } catch (e) {
+      return '';
+    }
+  }).catch(function () { return ''; });
+}
 
 // Search content
 function searchContent(query) {
@@ -116,7 +266,7 @@ function searchContent(query) {
     if (!domains || !domains['4khdhub']) throw new Error('Failed to get domain information');
     var baseUrl = domains['4khdhub'];
     var searchUrl = baseUrl + '/?s=' + encodeURIComponent(query);
-    return makeRequest4KHDHub(searchUrl).then(function (res) { return res.text(); }).then(function (html) {
+    return makeRequest(searchUrl).then(function (res) { return res.text(); }).then(function (html) {
       var $ = cheerio.load(html);
       var results = [];
       
@@ -167,7 +317,7 @@ function searchContent(query) {
 
 // Load content page and collect download links (and episodes for TV)
 function loadContent(url) {
-  return makeRequest4KHDHub(url).then(function (res) { return res.text(); }).then(function (html) {
+  return makeRequest(url).then(function (res) { return res.text(); }).then(function (html) {
     var $ = cheerio.load(html);
     var title = ($('h1.page-title').text() || '').split('(')[0].trim();
     var poster = $('meta[property="og:image"]').attr('content') || '';
@@ -249,14 +399,192 @@ function loadContent(url) {
   });
 }
 
-// Extract HubCloud links -> [{name,title,url,quality}] (using shared extractor)
-function extractHubCloudLinks4KHDHub(url, referer) {
-  return extractHubCloudLinks(url, referer, '4KHDHub');
+// Extract HubCloud links -> [{name,title,url,quality}]
+function extractHubCloudLinks(url, referer) {
+  var origin;
+  try { origin = new URL(url).origin; } catch (e) { origin = ''; }
+
+  function toAbsolute(href, base) {
+    try { return new URL(href, base).href; } catch (e) { return href; }
+  }
+
+  function resolveBuzzServer(buttonLink) {
+    var baseOrigin = (function () { try { return new URL(buttonLink).origin; } catch (e) { return origin; } })();
+    var dlUrl = buttonLink.replace(/\/?$/, '') + '/download';
+    return fetch(dlUrl, { headers: { 'Referer': buttonLink, 'User-Agent': DEFAULT_HEADERS['User-Agent'] }, redirect: 'manual' })
+      .then(function (res) {
+        var hx = res.headers.get('hx-redirect') || res.headers.get('location');
+        if (hx) return toAbsolute(hx, baseOrigin);
+        // Fallback: if manual redirect unsupported, use final response URL
+        return res.url || buttonLink;
+      }).catch(function () { return buttonLink; });
+  }
+
+  function resolveTenGbps(initialLink, headerDetails, size, qualityLabel, quality) {
+    var current = initialLink;
+    var baseOrigin = (function () { try { return new URL(initialLink).origin; } catch (e) { return origin; } })();
+    var maxHops = 6;
+    function step() {
+      return fetch(current, { redirect: 'manual', headers: { 'User-Agent': DEFAULT_HEADERS['User-Agent'] } })
+        .then(function (res) {
+          var loc = res.headers.get('location');
+          if (!loc) {
+            // Try current as final
+            return null;
+          }
+          if (loc.indexOf('id=') !== -1) {
+            var linkParam = (loc.split('link=')[1] || '').trim();
+            if (linkParam) {
+              try { linkParam = decodeURIComponent(linkParam); } catch (e) { /* ignore */ }
+              return linkParam;
+            }
+            return null;
+          } else {
+            current = toAbsolute(loc, baseOrigin);
+            return step();
+          }
+        });
+    }
+    return step().then(function (finalUrl) {
+      if (!finalUrl) return null;
+      return getFilenameFromUrl(finalUrl).then(function (actualFilename) {
+        var displayFilename = actualFilename || headerDetails || 'Unknown';
+        var titleParts = [];
+        if (displayFilename) titleParts.push(displayFilename);
+        if (size) titleParts.push(size);
+        var finalTitle = titleParts.join('\n');
+        return { name: '4KHDHub - 10Gbps Server' + qualityLabel, title: finalTitle, url: finalUrl, quality: quality };
+      }).catch(function () {
+        var displayFilename = headerDetails || 'Unknown';
+        var titleParts = [];
+        if (displayFilename) titleParts.push(displayFilename);
+        if (size) titleParts.push(size);
+        var finalTitle = titleParts.join('\n');
+        return { name: '4KHDHub - 10Gbps Server' + qualityLabel, title: finalTitle, url: finalUrl, quality: quality };
+      });
+    }).catch(function () { return null; });
+  }
+
+  return makeRequest(url).then(function (res) { return res.text(); }).then(function (html) {
+    var $ = cheerio.load(html);
+    var href = url;
+    if (url.indexOf('hubcloud.php') === -1) {
+      var rawHref = $('#download').attr('href') || $('a[href*="hubcloud.php"]').attr('href') || $('.download-btn').attr('href') || $('a[href*="download"]').attr('href');
+      if (!rawHref) throw new Error('Download element not found');
+      href = toAbsolute(rawHref, origin);
+    }
+    return makeRequest(href).then(function (res2) { return res2.text(); }).then(function (html2) {
+      var $$ = cheerio.load(html2);
+
+      function buildTask(buttonText, buttonLink, headerDetails, size, quality) {
+        var qualityLabel = quality ? (' - ' + quality + 'p') : '';
+        // Pixeldrain normalization
+        var pd = buttonLink.match(/pixeldrain\.(?:net|dev)\/u\/([a-zA-Z0-9]+)/);
+        if (pd && pd[1]) buttonLink = 'https://pixeldrain.net/api/file/' + pd[1];
+
+        if (buttonText.indexOf('BuzzServer') !== -1) {
+          return resolveBuzzServer(buttonLink).then(function (finalUrl) {
+            return getFilenameFromUrl(finalUrl).then(function (actualFilename) {
+              var displayFilename = actualFilename || headerDetails || 'Unknown';
+              var titleParts = [];
+              if (displayFilename) titleParts.push(displayFilename);
+              if (size) titleParts.push(size);
+              var finalTitle = titleParts.join('\n');
+            return { name: '4KHDHub - BuzzServer' + qualityLabel, title: finalTitle, url: finalUrl, quality: quality, size: size || null, fileName: actualFilename || null };
+            }).catch(function () {
+              var displayFilename = headerDetails || 'Unknown';
+              var titleParts = [];
+              if (displayFilename) titleParts.push(displayFilename);
+              if (size) titleParts.push(size);
+              var finalTitle = titleParts.join('\n');
+            return { name: '4KHDHub - BuzzServer' + qualityLabel, title: finalTitle, url: finalUrl, quality: quality, size: size || null, fileName: null };
+            });
+          }).catch(function () { return null; });
+        }
+        if (buttonText.indexOf('10Gbps') !== -1) {
+          return resolveTenGbps(buttonLink, headerDetails, size, qualityLabel, quality);
+        }
+        return getFilenameFromUrl(buttonLink).then(function (actualFilename) {
+          var displayFilename = actualFilename || headerDetails || 'Unknown';
+          var titleParts = [];
+          if (displayFilename) titleParts.push(displayFilename);
+          if (size) titleParts.push(size);
+          var finalTitle = titleParts.join('\n');
+          var name;
+          if (buttonText.indexOf('FSL Server') !== -1) name = '4KHDHub - FSL Server' + qualityLabel;
+          else if (buttonText.indexOf('S3 Server') !== -1) name = '4KHDHub - S3 Server' + qualityLabel;
+          else if (/pixeldra/i.test(buttonText) || /pixeldra/i.test(buttonLink)) name = '4KHDHub - Pixeldrain' + qualityLabel;
+          else if (buttonText.indexOf('Download File') !== -1) name = '4KHDHub - HubCloud' + qualityLabel;
+          else name = '4KHDHub - HubCloud' + qualityLabel;
+        return { name: name, title: finalTitle, url: buttonLink, quality: quality, size: size || null, fileName: actualFilename || null };
+        }).catch(function () {
+          var displayFilename = headerDetails || 'Unknown';
+          var titleParts = [];
+          if (displayFilename) titleParts.push(displayFilename);
+          if (size) titleParts.push(size);
+          var finalTitle = titleParts.join('\n');
+          var name = '4KHDHub - HubCloud' + qualityLabel;
+        return { name: name, title: finalTitle, url: buttonLink, quality: quality, size: size || null, fileName: null };
+        });
+      }
+
+      // Iterate per card to capture per-quality sections
+      var tasks = [];
+      var cards = $$('.card');
+      if (cards.length > 0) {
+        cards.each(function (ci, card) {
+          var $card = $$(card);
+          var header = $card.find('div.card-header').text() || $$('div.card-header').first().text() || '';
+          var size = $card.find('i#size').text() || $$('i#size').first().text() || '';
+          var quality = getIndexQuality(header);
+          var headerDetails = cleanTitle(header);
+          var localBtns = $card.find('div.card-body h2 a.btn');
+          if (localBtns.length === 0) localBtns = $card.find('a.btn, .btn, a[href]');
+          localBtns.each(function (i, el) {
+            var $btn = $$(el);
+            var text = ($btn.text() || '').trim();
+            var link = $btn.attr('href');
+            if (!link) return;
+            link = toAbsolute(link, href);
+            // Only consider plausible buttons
+            if (!/(hubcloud|hubdrive|pixeldrain|buzz|10gbps|workers\.dev|r2\.dev|download|api\/file)/i.test(link) && text.toLowerCase().indexOf('download') === -1) return;
+            tasks.push(buildTask(text, link, headerDetails, size, quality));
+          });
+        });
+      }
+
+      // Fallback: whole page buttons
+      if (tasks.length === 0) {
+        var buttons = $$.root().find('div.card-body h2 a.btn');
+        if (buttons.length === 0) {
+          var altSelectors = ['a.btn', '.btn', 'a[href]'];
+          for (var si = 0; si < altSelectors.length && buttons.length === 0; si++) {
+            buttons = $$.root().find(altSelectors[si]);
+          }
+        }
+        var size = $$('i#size').first().text() || '';
+        var header = $$('div.card-header').first().text() || '';
+        var quality = getIndexQuality(header);
+        var headerDetails = cleanTitle(header);
+        buttons.each(function (i, el) {
+          var $btn = $$(el);
+          var text = ($btn.text() || '').trim();
+          var link = $btn.attr('href');
+          if (!link) return;
+          link = toAbsolute(link, href);
+          tasks.push(buildTask(text, link, headerDetails, size, quality));
+        });
+      }
+
+      if (tasks.length === 0) return [];
+      return Promise.all(tasks).then(function (arr) { return (arr || []).filter(function (x) { return !!x; }); });
+    });
+  }).catch(function () { return []; });
 }
 
 // Extract HubDrive links (wrapper around HubCloud if needed)
 function extractHubDriveLinks(url, referer) {
-  return makeRequest4KHDHub(url).then(function (res) { return res.text(); }).then(function (html) {
+  return makeRequest(url).then(function (res) { return res.text(); }).then(function (html) {
     var $ = cheerio.load(html);
     var size = $('i#size').text() || '';
     var header = $('div.card-header').text() || '';
@@ -266,7 +594,7 @@ function extractHubDriveLinks(url, referer) {
     var primaryBtn = $('.btn.btn-primary.btn-user.btn-success1.m-1').attr('href') || $('a.btn.btn-primary').attr('href') || $('a[href*="download"]').attr('href') || $('a.btn').attr('href');
     if (!primaryBtn) return [];
     if ((primaryBtn || '').toLowerCase().indexOf('hubcloud') !== -1) {
-      return extractHubCloudLinks4KHDHub(primaryBtn, '4KHDHub');
+      return extractHubCloudLinks(primaryBtn, '4KHDHub');
     }
     var qualityLabel = quality ? (' - ' + quality + 'p') : '';
     return getFilenameFromUrl(primaryBtn).then(function (actualFilename) {
@@ -293,7 +621,7 @@ function processExtractorLink(link) {
   if (lower.indexOf('hubdrive') !== -1) {
     return extractHubDriveLinks(link, '4KHDHub');
   } else if (lower.indexOf('hubcloud') !== -1) {
-    return extractHubCloudLinks4KHDHub(link, '4KHDHub');
+    return extractHubCloudLinks(link, '4KHDHub');
   } else if (lower.indexOf('workers.dev') !== -1 || lower.indexOf('r2.dev') !== -1) {
     // Cloudflare Workers / R2 links – treat as HubCloud direct files
     return getFilenameFromUrl(link).then(function (actualFilename) {
@@ -358,7 +686,7 @@ function extractStreamingLinks(downloadLinks) {
 // TMDB helper
 function getTMDBDetails(tmdbId, mediaType) {
   var url = 'https://api.themoviedb.org/3/' + mediaType + '/' + tmdbId + '?api_key=' + TMDB_API_KEY;
-  return makeRequest4KHDHub(url).then(function (res) { return res.json(); }).then(function (data) {
+  return makeRequest(url).then(function (res) { return res.json(); }).then(function (data) {
     if (mediaType === 'movie') {
       return { title: data.title, original_title: data.original_title, year: data.release_date ? data.release_date.split('-')[0] : null };
     } else {
