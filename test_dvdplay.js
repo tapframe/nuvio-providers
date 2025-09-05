@@ -1,4 +1,4 @@
-const { getStreams } = require('./dvdplay.js');
+const { getStreams } = require('./providers/dvdplay.js');
 
 async function testDVDPlay() {
     console.log('=== DVDPlay Scraper Test ===\n');
