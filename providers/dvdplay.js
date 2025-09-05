@@ -430,7 +430,9 @@ function makeHTTPRequest(url, options = {}) {
 // Search for content on DVDPlay with fallback strategies
 function searchContent(title, year, mediaType) {
     const searchQuery = title.trim(); // Remove year from search
-    const searchUrl = `${BASE_URL}/search.php?q=${encodeURIComponent(searchQuery)}`;
+    // DVDPlay expects spaces to be encoded as + signs, not %20
+    const encodedQuery = searchQuery.replace(/\s+/g, '+');
+    const searchUrl = `${BASE_URL}/search.php?q=${encodedQuery}`;
     
     console.log(`[DVDPlay] Searching for: "${searchQuery}" at ${searchUrl}`);
     
