@@ -10,10 +10,12 @@ This repository contains local scrapers for the Nuvio streaming application. The
 ├── moviesmod.js           # MoviesMod scraper
 ├── hdrezka.js             # HDRezka scraper
 ├── dahmermovies.js        # Dahmer Movies scraper
+├── myflixer.js            # MyFlixer scraper
 ├── test_uhdmovies.js      # Test file for UHD Movies scraper
 ├── test_moviesmod.js      # Test file for MoviesMod scraper
 ├── test_hdrezka.js        # Test file for HDRezka scraper
 ├── test_dahmermovies.js   # Test file for Dahmer Movies scraper
+├── test_myflixer.js       # Test file for MyFlixer scraper
 └── README.md              # This file
 ```
 
@@ -58,6 +60,13 @@ This repository contains local scrapers for the Nuvio streaming application. The
 - **Content:** High-quality movies and TV shows
 - **Formats:** 1080p, 2160p (4K) with various encodings
 - **Features:** Direct file access, episode-specific extraction, quality filtering
+- **Status:** Active
+
+### MyFlixer
+- **Source:** MyFlixer website (watch32.sx)
+- **Content:** High-quality movies and TV shows with M3U8 streaming
+- **Formats:** 360p, 720p, 1080p with adaptive bitrate streaming
+- **Features:** M3U8 playlist extraction, Videostr decryption, multiple quality options, episode-specific streaming
 - **Status:** Active
 
 ## Scraper Development
@@ -208,7 +217,11 @@ async function processDownloadLink(link, mediaType, episodeNum) {
       url: finalUrl,
       quality: extractQuality(link.quality),
       size: extractSize(link.quality),
-      type: 'direct'
+      type: 'direct',
+      headers: { // Include headers if your stream requires them
+        "Referer": "https://your-source-site.com",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
     };
   } catch (error) {
     console.error(`[YourScraper] Error processing link: ${error.message}`);
@@ -328,9 +341,41 @@ testScraper().catch(console.error);
   quality: "Video quality (e.g., '1080p', '720p', '4K')",
   size: "File size (e.g., '2.5GB', '1.18GB')",
   fileName: "Original filename (optional)",
-  type: "direct" // or "torrent" for magnet links
+  type: "direct", // or "torrent" for magnet links
+  headers: { // Optional: Custom headers for video player requests
+    "Referer": "https://example.com",
+    "User-Agent": "Custom User Agent",
+    "Origin": "https://example.com"
+  }
 }
 ```
+
+#### Headers Support
+
+If your stream requires specific headers for playback (e.g., Referer, User-Agent, Authorization), you can include them in the `headers` object. These headers will be automatically passed to the video player when streaming the content.
+
+**Common use cases:**
+- **Referer**: Required by some CDNs to verify the request origin
+- **User-Agent**: Some servers block requests without proper user agents
+- **Authorization**: For streams requiring authentication tokens
+- **Origin**: CORS-related headers for cross-origin requests
+
+**Example with headers:**
+```javascript
+{
+  name: "XPrime",
+  title: "Movie Title 2024 1080p",
+  url: "https://cdn.example.com/stream.m3u8",
+  quality: "1080p",
+  type: "direct",
+  headers: {
+    "Referer": "https://xprime.tv",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  }
+}
+```
+
+**Note:** Headers are optional. If not provided, the video player will use default headers.
 
 ### Advanced Stream Object Example
 
@@ -342,7 +387,11 @@ testScraper().catch(console.error);
   quality: "1080p",
   size: "2.75GB",
   fileName: "Movie.Title.2024.1080p.WEB-DL.x265.mkv",
-  type: "direct"
+  type: "direct",
+  headers: {
+    "Referer": "https://moviesmod.com",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  }
 }
 ```
 
@@ -386,6 +435,164 @@ const defaultHeaders = {
   'Upgrade-Insecure-Requests': '1'
 };
 ```
+
+### Implementing Headers for Video Playback
+
+Many streaming sources require specific headers for video playback. Here's how to implement headers in your scraper:
+
+#### Basic Header Implementation
+```javascript
+// Define headers that will be passed to the video player
+const WORKING_HEADERS = {
+  'Referer': 'https://your-source-site.com',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  'Origin': 'https://your-source-site.com'
+};
+
+// Include headers in your stream object
+function createStreamObject(url, quality, title) {
+  return {
+    name: "YourScraper",
+    title: title,
+    url: url,
+    quality: quality,
+    type: 'direct',
+    headers: WORKING_HEADERS // These headers will be passed to the video player
+  };
+}
+```
+
+#### Real-World Example (XPrime Pattern)
+```javascript
+// Headers for XPrime-style sources
+const XPRIME_HEADERS = {
+  'Referer': 'https://xprime.tv',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+};
+
+// Apply headers to all streams from this source
+function processXPrimeStream(streamData) {
+  return {
+    name: "XPrime",
+    title: `${streamData.title} - ${streamData.quality}`,
+    url: streamData.url,
+    quality: streamData.quality,
+    type: 'direct',
+    headers: XPRIME_HEADERS // Video player will use these headers
+  };
+}
+```
+
+#### Conditional Headers Based on Source
+```javascript
+function createStreamWithHeaders(url, quality, title, sourceType) {
+  let headers = {};
+  
+  // Apply different headers based on the source
+  switch (sourceType) {
+    case 'xprime':
+      headers = {
+        'Referer': 'https://xprime.tv',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      };
+      break;
+    case 'moviesmod':
+      headers = {
+        'Referer': 'https://moviesmod.com',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      };
+      break;
+    case 'videostr':
+      headers = {
+        'Referer': 'https://videostr.net/',
+        'Origin': 'https://videostr.net/'
+      };
+      break;
+    default:
+      // No special headers needed
+      headers = undefined;
+  }
+  
+  const streamObject = {
+    name: "YourScraper",
+    title: title,
+    url: url,
+    quality: quality,
+    type: 'direct'
+  };
+  
+  // Only include headers if they're needed
+  if (headers && Object.keys(headers).length > 0) {
+    streamObject.headers = headers;
+  }
+  
+  return streamObject;
+}
+```
+
+#### Headers for Different Stream Types
+```javascript
+// For M3U8 streams that require referer
+function createM3U8Stream(m3u8Url, quality, refererUrl) {
+  return {
+    name: "YourScraper",
+    title: `${quality} Stream`,
+    url: m3u8Url,
+    quality: quality,
+    type: 'direct',
+    headers: {
+      'Referer': refererUrl,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+  };
+}
+
+// For direct MP4 streams with authentication
+function createAuthenticatedStream(mp4Url, quality, authToken) {
+  return {
+    name: "YourScraper",
+    title: `${quality} Stream`,
+    url: mp4Url,
+    quality: quality,
+    type: 'direct',
+    headers: {
+      'Authorization': `Bearer ${authToken}`,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+  };
+}
+```
+
+#### Important Notes About Headers
+
+1. **Headers are automatically passed to video players**: When you include a `headers` object in your stream, Nuvio will automatically pass these headers to both VLCPlayer and AndroidVideoPlayer.
+
+2. **Common header types**:
+   - **Referer**: Most important for CDN validation
+   - **User-Agent**: Prevents bot detection
+   - **Origin**: Required for CORS compliance
+   - **Authorization**: For authenticated streams
+
+3. **Testing headers**: Always test your streams with the headers to ensure they work:
+```javascript
+// Test if headers are working
+async function testStreamWithHeaders(streamUrl, headers) {
+  try {
+    const response = await fetch(streamUrl, {
+      method: 'HEAD',
+      headers: headers
+    });
+    return response.ok || response.status === 206; // 206 for partial content
+  } catch (error) {
+    console.error('Stream test failed:', error.message);
+    return false;
+  }
+}
+```
+
+4. **Header inheritance**: Headers are only applied to video playback, not to scraping requests. Use separate headers for scraping vs. playback.
+
+5. **Performance**: Headers don't impact performance - they're just additional HTTP headers sent with video requests.
 
 #### 5. Caching
 ```javascript
@@ -482,6 +689,49 @@ const response = await fetch(url, {
 });
 
 // ❌ Avoid: axios, request, http modules
+```
+
+#### Async/Await Usage
+**IMPORTANT:** Do not use `async/await` syntax in your scrapers for React Native compatibility.
+
+```javascript
+// ❌ Don't use async/await
+async function getStreams(title, year) {
+  const response = await fetch(url);
+  const data = await response.json();
+  return data;
+}
+
+// ✅ Use Promises with .then()/.catch()
+function getStreams(title, year) {
+  return fetch(url)
+    .then(response => response.json())
+    .then(data => {
+      // Process data
+      return processedStreams;
+    })
+    .catch(error => {
+      console.error(`[YourScraper] Error: ${error.message}`);
+      return [];
+    });
+}
+
+// ✅ Or use Promise constructor for complex flows
+function getStreams(title, year) {
+  return new Promise((resolve, reject) => {
+    fetch(url)
+      .then(response => response.json())
+      .then(data => {
+        // Process data
+        const streams = processData(data);
+        resolve(streams);
+      })
+      .catch(error => {
+        console.error(`[YourScraper] Error: ${error.message}`);
+        resolve([]); // Return empty array instead of rejecting
+      });
+  });
+}
 ```
 
 #### Data Storage
@@ -838,9 +1088,41 @@ function extractFromJavaScript(html) {
 - Test with different content types
 - Ask for help in community discussions
 
-## Legal Notice
+---
 
-This repository is for educational purposes. Users are responsible for ensuring they comply with all applicable laws and terms of service when using these scrapers. The authors are not responsible for any misuse of this software.
+## 🧰 Tools & Technologies
+
+<p align="left">
+  <a href="https://skillicons.dev">
+    <img src="https://skillicons.dev/icons?i=javascript,nodejs,github,githubactions&theme=light&perline=4" />
+  </a>
+</p>
+
+---
+
+
+
+## 📄 License
+
+[![GNU GPLv3 Image](https://www.gnu.org/graphics/gplv3-127x51.png)](http://www.gnu.org/licenses/gpl-3.0.en.html)
+
+These scrapers are **free software**: you can use, study, share, and modify them as you wish.
+
+They are distributed under the terms of the [GNU General Public License](https://www.gnu.org/licenses/gpl.html) version 3 or later, published by the Free Software Foundation.
+
+---
+
+## ⚖️ DMCA Disclaimer
+
+We hereby issue this notice to clarify that these scrapers function similarly to a standard web browser by fetching video files from the internet.
+
+- **No content is hosted by this repository or the Nuvio application.**
+- Any content accessed is hosted by third-party websites.
+- Users are solely responsible for their usage and must comply with their local laws.
+
+If you believe content is violating copyright laws, please contact the **actual file hosts**, **not** the developers of this repository or the Nuvio app.
+
+---
 
 ## Support
 
@@ -850,3 +1132,5 @@ For issues or questions:
 - Join the community discussions
 
 ---
+
+**Thank You for using Nuvio Local Scrapers!**

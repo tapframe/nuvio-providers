@@ -351,7 +351,7 @@ function getStreamingLinks(contentId, title, platform) {
         // Platform-specific playlist endpoints
         const playlistEndpoints = {
             'netflix': `${NETMIRROR_BASE}/tv/playlist.php`,
-            'primevideo': `${NETMIRROR_BASE}/tv/pv/playlist.php`,
+            'primevideo': `${NETMIRROR_BASE}/mobile/pv/playlist.php`,
             'disney': `${NETMIRROR_BASE}/mobile/hs/playlist.php`
         };
         
@@ -664,33 +664,14 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
                                     }
                                 }
                                 
-                                // Platform-specific headers
-                                let streamHeaders;
-                                if (platform.toLowerCase() === 'primevideo') {
-                                    streamHeaders = {
-                                        "Accept": "*/*",
-                                        "Accept-Encoding": "gzip, deflate, br, zstd",
-                                        "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
-                                        "Connection": "keep-alive",
-                                        "Origin": "https://net2025.cc",
-                                        "Referer": "https://net2025.cc/",
-                                        "Sec-Fetch-Dest": "empty",
-                                        "Sec-Fetch-Mode": "cors",
-                                        "Sec-Fetch-Site": "cross-site",
-                                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/138.0.7204.156 Mobile/15E148 Safari/604.1",
-                                        "sec-ch-ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
-                                        "sec-ch-ua-mobile": "?0",
-                                        "sec-ch-ua-platform": "\"macOS\""
-                                    };
-                                } else {
-                                    // Default headers for Netflix and Disney
-                                    streamHeaders = {
-                                        "Accept": "application/vnd.apple.mpegurl, video/mp4, */*",
-                                        "Origin": "https://net2025.cc",
-                                        "Referer": "https://net2025.cc/",
-                                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/138.0.7204.156 Mobile/15E148 Safari/604.1"
-                                    };
-                                }
+                                // Unified headers for all platforms (Netflix, Prime Video, and Disney)
+                                const streamHeaders = {
+                                    "Accept": "application/vnd.apple.mpegurl, video/mp4, */*",
+                                    "Origin": "https://net2025.cc",
+                                    "Referer": "https://net2025.cc/tv/home",
+                                    "Cookie": "hd=on",
+                                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/138.0.7204.156 Mobile/15E148 Safari/604.1"
+                                };
                                 
                                 return {
                                     name: `NetMirror (${platform.charAt(0).toUpperCase() + platform.slice(1)})`,

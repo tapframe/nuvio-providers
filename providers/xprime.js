@@ -376,6 +376,7 @@ function getXprimeServers(api) {
     console.log('[Xprime] Using hardcoded servers...');
     const hardcodedServers = [
         { name: 'primebox', status: 'ok' },
+        { name: 'rage', status: 'ok' },
         // Temporarily disabled Phoenix server
         // { name: 'phoenix', status: 'ok' },
         // Temporarily disabled Fox server
@@ -461,7 +462,33 @@ function processOtherServerResponse(data, serverLabel, serverName) {
     const links = [];
     
     try {
-        if (data.url) {
+        // Special handling for Rage server response
+        if (serverName === 'rage' && data && data.success && Array.isArray(data.qualities)) {
+            data.qualities.forEach(function(q) {
+                if (q && q.url) {
+                    const normalizedQuality = getQualityFromName(q.quality);
+                    // Normalize size to a human-readable string
+                    let sizeStr = 'Unknown';
+                    if (typeof q.size === 'number' && isFinite(q.size)) {
+                        const gb = q.size / (1024 * 1024 * 1024);
+                        const mb = q.size / (1024 * 1024);
+                        sizeStr = gb >= 1 ? `${gb.toFixed(2)} GB` : `${mb.toFixed(0)} MB`;
+                    } else if (typeof q.size === 'string' && q.size.trim()) {
+                        sizeStr = q.size.trim();
+                    }
+                    links.push({
+                        source: serverLabel,
+                        name: `XPRIME ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} - ${normalizedQuality}`,
+                        url: q.url,
+                        quality: normalizedQuality,
+                        size: sizeStr,
+                        type: 'VIDEO',
+                        headers: WORKING_HEADERS,
+                        referer: 'https://xprime.tv'
+                    });
+                }
+            });
+        } else if (data.url) {
             // Try to extract quality from the URL or response data
             let quality = 'Unknown';
             
@@ -609,15 +636,25 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
             const serverPromises = servers.map(function(server) {
                 console.log(`[Xprime] Processing server: ${server.name}`);
                 
-                const queryParams = buildQueryParams(server.name, title, year, imdbId, season, episode);
-                const serverUrl = `${api}/${server.name}?${queryParams}`;
+                // Rage server requires a different endpoint (backend.xprime.tv) and TMDB id param
+                let serverUrl;
+                if (server.name === 'rage') {
+                    if (type === 'tv' && season && episode) {
+                        serverUrl = `https://backend.xprime.tv/rage?id=${encodeURIComponent(tmdbId)}&season=${encodeURIComponent(season)}&episode=${encodeURIComponent(episode)}`;
+                    } else {
+                        serverUrl = `https://backend.xprime.tv/rage?id=${encodeURIComponent(tmdbId)}`;
+                    }
+                } else {
+                    const queryParams = buildQueryParams(server.name, title, year, imdbId, season, episode);
+                    serverUrl = `${api}/${server.name}?${queryParams}`;
+                }
                 
                 console.log(`[Xprime] Request URL: ${serverUrl}`);
                 
                 return makeRequest(serverUrl, {
                     headers: {
-                        'Origin': api,
-                        'Referer': api
+                        'Origin': server.name === 'rage' ? 'https://xprime.tv' : api,
+                        'Referer': server.name === 'rage' ? 'https://xprime.tv/' : api
                     }
                 }).then(function(response) {
                     return response.json().then(function(data) {

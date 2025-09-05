@@ -9,7 +9,8 @@ var SHOWBOX_BASE = 'https://www.showbox.media';
 var PROXY_PREFIX = 'https://timely-taiyaki-81a26d.netlify.app/?destination='; // Proxy all showbox.media
 var FEBBOX_BASE = 'https://www.febbox.com';
 var FEBBOX_FILE_SHARE_LIST_URL = FEBBOX_BASE + '/file/file_share_list';
-var FEBBOX_COOKIE_VALUE = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NTA5MzA4NTYsIm5iZiI6MTc1MDkzMDg1NiwiZXhwIjoxNzgyMDM0ODc2LCJkYXRhIjp7InVpZCI6ODQ2NzQ4LCJ0b2tlbiI6ImIzNTllZDk1NjBkMDI5ZmQwY2IyNjdlYTZlMWIwMDlkIn19.WqD3ruYvVx8tyfFuRDMWDaTz1XdvLztW4h_rGt6xt8o';
+var FEBBOX_COOKIE_VALUE = (typeof SCRAPER_SETTINGS !== 'undefined' && SCRAPER_SETTINGS && SCRAPER_SETTINGS.cookie) ? SCRAPER_SETTINGS.cookie : 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NTA5MzA4NTYsIm5iZiI6MTc1MDkzMDg1NiwiZXhwIjoxNzgyMDM0ODc2LCJkYXRhIjp7InVpZCI6ODQ2NzQ4LCJ0b2tlbiI6ImIzNTllZDk1NjBkMDI5ZmQwY2IyNjdlYTZlMWIwMDlkIn19.WqD3ruYvVx8tyfFuRDMWDaTz1XdvLztW4h_rGt6xt8o';
+var DEFAULT_REGION = (typeof SCRAPER_SETTINGS !== 'undefined' && SCRAPER_SETTINGS && SCRAPER_SETTINGS.region) ? SCRAPER_SETTINGS.region : null;
 
 // Headers
 var DEFAULT_HEADERS = {
@@ -279,16 +280,39 @@ function extractDetailedFilename(url) {
 
 function sortPreferMkvOrg(streams) {
   if (!streams || streams.length === 0) return streams;
-  function score(s) {
+  function baseOrder(q) {
+    if (q === 'ORG') return 6;
+    if (q === '2160p') return 5;
+    if (q === '1080p') return 4;
+    if (q === '720p') return 3;
+    if (q === '480p') return 2;
+    if (q === '360p') return 1;
+    return 0;
+  }
+  function mkvBonus(s) {
     var fname = (s.fileName || s.title || '').toLowerCase();
     var url = (s.url || '').toLowerCase();
-    var mkv = fname.indexOf('.mkv') !== -1 || /\.mkv(\?|$)/i.test(url) ? 2 : 0;
-    var org = (s.quality === 'ORG') || (s.title || '').toLowerCase().indexOf('org') !== -1 || fname.indexOf('original') !== -1 || url.indexOf('/org_') !== -1 ? 1 : 0;
-    var qualScore = (function (q) { if (q==='2160p') return 4; if (q==='1080p') return 3; if (q==='720p') return 2; if (q==='480p') return 1; return 0; })(s.quality || '');
-    // Strongly prioritize ORG at top, then MKV, then quality
-    return org*100 + mkv*10 + qualScore;
+    return (fname.indexOf('.mkv') !== -1 || /\.mkv(\?|$)/i.test(url)) ? 1 : 0;
   }
-  return [].concat(streams).sort(function (a,b){ return score(b)-score(a); });
+  function sizeBytes(sz) {
+    if (!sz) return 0;
+    var m = String(sz).match(/([\d.]+)\s*(gb|mb|kb|b)/i);
+    if (!m) return 0;
+    var v = parseFloat(m[1]);
+    var u = m[2].toLowerCase();
+    var mult = (u==='gb')?1024*1024*1024:(u==='mb')?1024*1024:(u==='kb')?1024:1;
+    return Math.floor(v*mult);
+  }
+  return [].concat(streams).sort(function(a,b){
+    var aBase = baseOrder(a.quality||'');
+    var bBase = baseOrder(b.quality||'');
+    if (aBase !== bBase) return bBase - aBase;
+    var aM = mkvBonus(a), bM = mkvBonus(b);
+    if (aM !== bM) return bM - aM;
+    var aS = sizeBytes(a.size), bS = sizeBytes(b.size);
+    if (aS !== bS) return bS - aS;
+    return 0;
+  });
 }
 
 // Extract (share_key, fids[]) from FebBox share page
@@ -445,9 +469,9 @@ function getStreamsByRegion(tmdbId, type, season, episode, region) {
       var best = findBestMatch(results, tmdb.title, tmdb.year) || results[0];
       return extractFebboxLink(best.url).then(function (shareUrl) {
         if (!shareUrl) return [];
-        return getStreamsFromFebboxShare(shareUrl, tmdbType === 'movie' ? 'movie' : 'tv', season, episode, region).then(function (streams) {
-          return streams.map(function (s) { s.name = 'ShowBox - ' + region; return s; });
-        });
+        return getStreamsFromFebboxShare(shareUrl, tmdbType === 'movie' ? 'movie' : 'tv', season, episode, region)
+          .then(function (streams) { return sortPreferMkvOrg(streams || []); })
+          .then(function (streams) { return streams.map(function (s) { s.name = 'ShowBox - ' + region; return s; }); });
       });
     });
   }).catch(function () { return []; });
@@ -464,12 +488,8 @@ function getStreams(tmdbId, type, season, episode) {
       var best = findBestMatch(results, tmdb.title, tmdb.year) || results[0];
       return extractFebboxLink(best.url).then(function (shareUrl) {
         if (!shareUrl) return [];
-        return getStreamsFromFebboxShare(shareUrl, tmdbType === 'movie' ? 'movie' : 'tv', season, episode).then(function (streams) {
-          // Sort highest quality first
-          var order = { '2160p': 5, '1080p': 4, '720p': 3, '480p': 2, '360p': 1, 'ORG': 0 };
-          streams.sort(function (a, b) { return (order[b.quality] || 0) - (order[a.quality] || 0); });
-          return streams;
-        });
+        return getStreamsFromFebboxShare(shareUrl, tmdbType === 'movie' ? 'movie' : 'tv', season, episode, DEFAULT_REGION)
+          .then(function (streams) { return sortPreferMkvOrg(streams || []); });
       });
     });
   }).catch(function () { return []; });
