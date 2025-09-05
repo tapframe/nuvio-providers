@@ -159,7 +159,7 @@
       "filename": "providers/dvdplay.js",
       "enabled": true,
       "formats": ["mkv", "mp4"],
-      "logo": "https://dvdplay.rodeo/favicon.ico",
+      "logo": "https://dvdplay.rodeo/dvdplay-icon.png",
       "contentLanguage": [
         "en"
       ]
