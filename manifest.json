@@ -147,6 +147,24 @@
       "disabledPlatforms": ["ios"]
     },
     {
+      "id": "dvdplay",
+      "name": "DVDPlay",
+      "description": "Direct download links from DVDPlay with HubCloud integration",
+      "version": "1.0.0",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/dvdplay.js",
+      "enabled": true,
+      "formats": ["mkv", "mp4"],
+      "logo": "https://dvdplay.rodeo/favicon.ico",
+      "contentLanguage": [
+        "en"
+      ]
+    },
+    {
       "id": "vidsrc",
       "name": "VidSrc",
       "description": "High-quality M3U8 streaming links from VidSrc with multiple server support",

@@ -3,7 +3,7 @@
 
 // Constants
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c"; // This will be replaced by Nuvio
-const BASE_URL = 'https://dvdplay.forum';
+const BASE_URL = 'https://dvdplay.rodeo';
 
 // === HubCloud Extractor Functions (embedded) ===
 
