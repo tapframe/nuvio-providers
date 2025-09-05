@@ -54,6 +54,16 @@ function makeRequest(url, options = {}) {
   });
 }
 
+// URL base extraction (from DVDPlay)
+function getBaseUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    return `${urlObj.protocol}//${urlObj.host}`;
+  } catch (e) {
+    return '';
+  }
+}
+
 // Base64 and misc helpers (RN-safe)
 function base64Decode(str) {
   try {
@@ -98,6 +108,48 @@ function decodeFilename(filename) {
 function getIndexQuality(str) {
   var match = (str || '').match(/(\d{3,4})[pP]/);
   return match ? parseInt(match[1], 10) : 2160;
+}
+
+// Quality parsing for sorting (from DVDPlay)
+function parseQualityForSort(qualityString) {
+  const match = (qualityString || '').match(/(\d{3,4})p/i);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+// Extract quality from text (from DVDPlay)
+function extractQuality(text) {
+  const match = (text || '').match(/(480p|720p|1080p|2160p|4k)/i);
+  return match ? match[1] : 'Unknown';
+}
+
+// Extract size from text (from DVDPlay)
+function extractSize(text) {
+  const match = (text || '').match(/\[([^\]]+)\]/);
+  return match ? match[1] : null;
+}
+
+// Get service name from URL (from DVDPlay)
+function getServiceName(url) {
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname.toLowerCase();
+    
+    if (hostname.includes('gofile')) return 'GoFile';
+    if (hostname.includes('gdflix')) return 'GdFlix';
+    if (hostname.includes('filepress')) return 'FilePress';
+    if (hostname.includes('fpgo')) return 'FpGo';
+    if (hostname.includes('hubcloud')) return 'HubCloud';
+    
+    // Extract domain name for unknown services
+    const parts = hostname.split('.');
+    if (parts.length >= 2) {
+      return parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
+    }
+    
+    return 'Unknown Service';
+  } catch (error) {
+    return 'Unknown Service';
+  }
 }
 
 function cleanTitle(title) {
@@ -310,6 +362,56 @@ function searchContent(query) {
           }
         });
       }
+      return results;
+    });
+  }).catch(function (error) {
+    console.log(`[4KHDHub] Search failed: ${error.message}`);
+    
+    // Fallback strategy: try browsing recent updates on main page (from DVDPlay)
+    console.log(`[4KHDHub] Attempting fallback: browsing recent updates`);
+    return searchFromMainPage(query).catch(function (fallbackError) {
+      console.error(`[4KHDHub] Fallback search also failed: ${fallbackError.message}`);
+      return [];
+    });
+  });
+}
+
+// Fallback search strategy: look through recent updates on main page (from DVDPlay)
+function searchFromMainPage(query) {
+  console.log(`[4KHDHub] Searching main page for "${query}"`);
+  
+  return getDomains().then(function (domains) {
+    if (!domains || !domains['4khdhub']) throw new Error('Failed to get domain information');
+    var baseUrl = domains['4khdhub'];
+    
+    return makeRequest(baseUrl).then(function (res) { return res.text(); }).then(function (html) {
+      var $ = cheerio.load(html);
+      var results = [];
+      
+      // Look for movie links in the main page
+      var titleLower = query.toLowerCase();
+      
+      $('a[href]').each(function (i, el) {
+        var $el = $(el);
+        var href = $el.attr('href') || '';
+        var title = ($el.text() || '').trim();
+        
+        if (title && href && /\/\d{4}\//.test(href)) {
+          // Simple matching - check if title words appear in the page title
+          if (titleLower.split(' ').some(function (word) {
+            return word.length > 2 && title.toLowerCase().includes(word);
+          })) {
+            var absoluteUrl = href.indexOf('http') === 0 ? href : (baseUrl + (href.indexOf('/') === 0 ? '' : '/') + href);
+            results.push({
+              title: title,
+              url: absoluteUrl
+            });
+            console.log(`[4KHDHub] Found potential match: "${title}" at ${absoluteUrl}`);
+          }
+        }
+      });
+      
+      console.log(`[4KHDHub] Fallback search found ${results.length} potential matches`);
       return results;
     });
   });

@@ -17,6 +17,63 @@ function getBaseUrl(url) {
     }
 }
 
+// Base64 and encoding utilities (from 4KHDHub)
+function base64Decode(str) {
+    try {
+        // Convert base64 -> binary string -> UTF-8
+        // escape/unescape is deprecated but works in RN environments for this use case
+        return decodeURIComponent(escape(atob(str)));
+    } catch (e) {
+        return '';
+    }
+}
+
+function base64Encode(str) {
+    try {
+        return btoa(unescape(encodeURIComponent(str)));
+    } catch (e) {
+        return '';
+    }
+}
+
+function rot13(str) {
+    return (str || '').replace(/[A-Za-z]/g, function (char) {
+        var start = char <= 'Z' ? 65 : 97;
+        return String.fromCharCode(((char.charCodeAt(0) - start + 13) % 26) + start);
+    });
+}
+
+// Advanced title normalization (from 4KHDHub)
+function normalizeTitle(title) {
+    return (title || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// String similarity calculation (from 4KHDHub)
+function calculateSimilarity(str1, str2) {
+    var s1 = normalizeTitle(str1);
+    var s2 = normalizeTitle(str2);
+    if (s1 === s2) return 1.0;
+    var len1 = s1.length;
+    var len2 = s2.length;
+    if (len1 === 0) return len2 === 0 ? 1.0 : 0.0;
+    if (len2 === 0) return 0.0;
+    var matrix = Array(len1 + 1).fill(null).map(function () { return Array(len2 + 1).fill(0); });
+    for (var i = 0; i <= len1; i++) matrix[i][0] = i;
+    for (var j = 0; j <= len2; j++) matrix[0][j] = j;
+    for (i = 1; i <= len1; i++) {
+        for (j = 1; j <= len2; j++) {
+            var cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+        }
+    }
+    var maxLen = Math.max(len1, len2);
+    return (maxLen - matrix[len1][len2]) / maxLen;
+}
+
 function makeRequest(url, options = {}) {
     return new Promise((resolve, reject) => {
         const urlObj = new URL(url);
@@ -217,6 +274,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: link,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             })
@@ -232,6 +290,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: link,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             });
@@ -249,6 +308,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: link,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             })
@@ -264,6 +324,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: link,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             });
@@ -288,6 +349,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: convertedLink,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             })
@@ -303,6 +365,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: convertedLink,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             });
@@ -320,6 +383,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: link,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             })
@@ -335,6 +399,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: link,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             });
@@ -352,6 +417,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: link,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             })
@@ -367,6 +433,7 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
                                     title: finalTitle,
                                     url: link,
                                     quality: quality + 'p',
+                                    size: size,
                                     type: 'direct'
                                 });
                             });
@@ -384,6 +451,33 @@ function extractHubCloudLinks(url, referer = 'HubCloud') {
             console.error(`[DVDPlay] HubCloud extraction error for ${url}:`, error.message);
             return [];
         });
+}
+
+// Advanced redirect resolution (from 4KHDHub)
+function getRedirectLinks(url) {
+    return makeRequest(url).then(function (res) { return res.body; }).then(function (html) {
+        var regex = /s\('o','([A-Za-z0-9+/=]+)'|ck\('_wp_http_\d+','([^']+)'/g;
+        var combined = '';
+        var m;
+        while ((m = regex.exec(html)) !== null) {
+            var val = m[1] || m[2];
+            if (val) combined += val;
+        }
+        try {
+            var decoded = base64Decode(rot13(base64Decode(base64Decode(combined))));
+            var obj = JSON.parse(decoded);
+            var encodedurl = base64Decode(obj.o || '').trim();
+            var data = base64Decode(obj.data || '').trim();
+            var blog = (obj.blog_url || '').trim();
+            if (encodedurl) return encodedurl;
+            if (blog && data) {
+                return makeRequest(blog + '?re=' + data).then(function (r) { return r.body; }).then(function (txt) { return (txt || '').trim(); }).catch(function () { return ''; });
+            }
+            return '';
+        } catch (e) {
+            return '';
+        }
+    }).catch(function () { return ''; });
 }
 
 // === End of HubCloud Extractor Functions ===
@@ -561,14 +655,23 @@ function processDownloadLink(downloadPageUrl) {
         });
 }
 
-// Find best match from search results
-function findBestMatch(target, candidates) {
-    if (candidates.length === 0) return null;
-    if (candidates.length === 1) return candidates[0];
+// Find best match from search results (enhanced from 4KHDHub)
+function findBestMatch(results, query) {
+    if (!results || results.length === 0) return null;
+    if (results.length === 1) return results[0];
     
-    // Simple matching - return first result for now
-    // Could be enhanced with better string similarity matching
-    return candidates[0];
+    var scored = results.map(function (r) {
+        var score = 0;
+        if (normalizeTitle(r.title) === normalizeTitle(query)) score += 100;
+        var sim = calculateSimilarity(r.title, query); score += sim * 50;
+        if (normalizeTitle(r.title).indexOf(normalizeTitle(query)) !== -1) score += 15; // quick containment bonus
+        var lengthDiff = Math.abs(r.title.length - query.length);
+        score += Math.max(0, 10 - lengthDiff / 5);
+        if (/(19|20)\d{2}/.test(r.title)) score += 5;
+        return { item: r, score: score };
+    });
+    scored.sort(function (a, b) { return b.score - a.score; });
+    return scored[0].item;
 }
 
 // Parse quality for sorting
@@ -613,6 +716,18 @@ function getServiceName(url) {
     }
 }
 
+// TMDB helper (from 4KHDHub)
+function getTMDBDetails(tmdbId, mediaType) {
+    var url = 'https://api.themoviedb.org/3/' + mediaType + '/' + tmdbId + '?api_key=' + TMDB_API_KEY;
+    return makeHTTPRequest(url).then(function (res) { return res.json(); }).then(function (data) {
+        if (mediaType === 'movie') {
+            return { title: data.title, original_title: data.original_title, year: data.release_date ? data.release_date.split('-')[0] : null };
+        } else {
+            return { title: data.name, original_title: data.original_name, year: data.first_air_date ? data.first_air_date.split('-')[0] : null };
+        }
+    }).catch(function () { return null; });
+}
+
 // Validate if a video URL is working (not 404 or broken)
 function validateVideoUrl(url, timeout = 10000) {
     console.log(`[DVDPlay] Validating URL: ${url.substring(0, 100)}...`);
@@ -638,99 +753,89 @@ function validateVideoUrl(url, timeout = 10000) {
     });
 }
 
-// Main function that Nuvio will call
+// Main function that Nuvio will call (enhanced with better TMDB handling)
 function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = null) {
     console.log(`[DVDPlay] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}`);
     
-    // 1. Get TMDB info
-    const tmdbUrl = `https://api.themoviedb.org/3/${mediaType === 'tv' ? 'tv' : 'movie'}/${tmdbId}?api_key=${TMDB_API_KEY}`;
-    
-    return makeHTTPRequest(tmdbUrl)
-        .then(response => response.json())
-        .then(tmdbData => {
-            const title = mediaType === 'tv' ? tmdbData.name : tmdbData.title;
-            const year = mediaType === 'tv' ? tmdbData.first_air_date?.substring(0, 4) : tmdbData.release_date?.substring(0, 4);
+    var tmdbType = (mediaType === 'series' ? 'tv' : mediaType);
+    return getTMDBDetails(tmdbId, tmdbType).then(function (tmdb) {
+        if (!tmdb || !tmdb.title) return [];
+        
+        console.log(`[DVDPlay] TMDB Info: "${tmdb.title}" (${tmdb.year})`);
 
-            if (!title) {
-                throw new Error('Could not extract title from TMDB response');
+        // 2. Search for content
+        return searchContent(tmdb.title, tmdb.year, mediaType).then(searchResults => {
+            if (searchResults.length === 0) {
+                console.log(`[DVDPlay] No search results found`);
+                return [];
             }
 
-            console.log(`[DVDPlay] TMDB Info: "${title}" (${year})`);
-
-            // 2. Search for content
-            return searchContent(title, year, mediaType).then(searchResults => {
-                if (searchResults.length === 0) {
-                    console.log(`[DVDPlay] No search results found`);
+            // 3. Extract download links from best match
+            const selectedResult = findBestMatch(searchResults, tmdb.title);
+            return extractDownloadLinks(selectedResult.url).then(downloadLinks => {
+                if (downloadLinks.length === 0) {
+                    console.log(`[DVDPlay] No download pages found`);
                     return [];
                 }
 
-                // 3. Extract download links from best match
-                const selectedResult = findBestMatch(title, searchResults);
-                return extractDownloadLinks(selectedResult.url).then(downloadLinks => {
-                    if (downloadLinks.length === 0) {
-                        console.log(`[DVDPlay] No download pages found`);
-                        return [];
-                    }
+                // 4. Process download links to get final streams
+                const streamPromises = downloadLinks.map(link => processDownloadLink(link));
+                return Promise.all(streamPromises).then(nestedStreams => {
+                    let allStreams = nestedStreams.flat();
 
-                    // 4. Process download links to get final streams
-                    const streamPromises = downloadLinks.map(link => processDownloadLink(link));
-                    return Promise.all(streamPromises).then(nestedStreams => {
-                        let allStreams = nestedStreams.flat();
+                    // 5. Filter out unwanted links (e.g., Google AMP links)
+                    allStreams = allStreams.filter(stream => !stream.url.includes('cdn.ampproject.org'));
 
-                        // 5. Filter out unwanted links (e.g., Google AMP links)
-                        allStreams = allStreams.filter(stream => !stream.url.includes('cdn.ampproject.org'));
+                    // 6. Remove duplicates based on URL
+                    const uniqueStreams = Array.from(new Map(allStreams.map(stream => [stream.url, stream])).values());
 
-                        // 6. Remove duplicates based on URL
-                        const uniqueStreams = Array.from(new Map(allStreams.map(stream => [stream.url, stream])).values());
-
-                        // 7. Validate URLs in parallel (optional, can be disabled for speed)
-                        console.log(`[DVDPlay] Validating ${uniqueStreams.length} stream URLs...`);
-                        const validationPromises = uniqueStreams.map(stream => {
-                            try {
-                                // Check if URL validation is enabled (can be disabled for faster results)
-                                if (typeof URL_VALIDATION_ENABLED !== 'undefined' && !URL_VALIDATION_ENABLED) {
-                                    console.log(`[DVDPlay] ✓ URL validation disabled, accepting stream`);
-                                    return Promise.resolve(stream);
-                                }
-                                
-                                return validateVideoUrl(stream.url, 8000).then(isValid => {
-                                    if (isValid) {
-                                        return stream;
-                                    } else {
-                                        console.log(`[DVDPlay] ✗ Filtering out invalid stream: ${stream.name}`);
-                                        return null;
-                                    }
-                                }).catch(error => {
-                                    console.log(`[DVDPlay] ✗ Validation error for ${stream.name}: ${error.message}`);
-                                    return null; // Filter out streams that fail validation
-                                });
-                            } catch (error) {
-                                console.log(`[DVDPlay] ✗ Validation error for ${stream.name}: ${error.message}`);
-                                return Promise.resolve(null); // Filter out streams that fail validation
+                    // 7. Validate URLs in parallel (optional, can be disabled for speed)
+                    console.log(`[DVDPlay] Validating ${uniqueStreams.length} stream URLs...`);
+                    const validationPromises = uniqueStreams.map(stream => {
+                        try {
+                            // Check if URL validation is enabled (can be disabled for faster results)
+                            if (typeof URL_VALIDATION_ENABLED !== 'undefined' && !URL_VALIDATION_ENABLED) {
+                                console.log(`[DVDPlay] ✓ URL validation disabled, accepting stream`);
+                                return Promise.resolve(stream);
                             }
-                        });
-
-                        return Promise.all(validationPromises).then(validatedStreams => {
-                            const validStreams = validatedStreams.filter(stream => stream !== null);
-
-                            // 8. Sort by quality (highest first)
-                            validStreams.sort((a, b) => {
-                                const qualityA = parseQualityForSort(a.quality);
-                                const qualityB = parseQualityForSort(b.quality);
-                                return qualityB - qualityA;
+                            
+                            return validateVideoUrl(stream.url, 8000).then(isValid => {
+                                if (isValid) {
+                                    return stream;
+                                } else {
+                                    console.log(`[DVDPlay] ✗ Filtering out invalid stream: ${stream.name}`);
+                                    return null;
+                                }
+                            }).catch(error => {
+                                console.log(`[DVDPlay] ✗ Validation error for ${stream.name}: ${error.message}`);
+                                return null; // Filter out streams that fail validation
                             });
+                        } catch (error) {
+                            console.log(`[DVDPlay] ✗ Validation error for ${stream.name}: ${error.message}`);
+                            return Promise.resolve(null); // Filter out streams that fail validation
+                        }
+                    });
 
-                            console.log(`[DVDPlay] Successfully processed ${validStreams.length} valid streams (${uniqueStreams.length - validStreams.length} filtered out)`);
-                            return validStreams;
+                    return Promise.all(validationPromises).then(validatedStreams => {
+                        const validStreams = validatedStreams.filter(stream => stream !== null);
+
+                        // 8. Sort by quality (highest first)
+                        validStreams.sort((a, b) => {
+                            const qualityA = parseQualityForSort(a.quality);
+                            const qualityB = parseQualityForSort(b.quality);
+                            return qualityB - qualityA;
                         });
+
+                        console.log(`[DVDPlay] Successfully processed ${validStreams.length} valid streams (${uniqueStreams.length - validStreams.length} filtered out)`);
+                        return validStreams;
                     });
                 });
             });
-        })
-        .catch(error => {
-            console.error(`[DVDPlay] Error in getStreams: ${error.message}`);
-            return [];
         });
+    }).catch(function (error) {
+        console.error(`[DVDPlay] Error in getStreams: ${error.message}`);
+        return [];
+    });
 }
 
 // Export for React Native
