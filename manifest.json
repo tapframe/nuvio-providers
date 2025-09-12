@@ -180,6 +180,51 @@
       "contentLanguage": [
         "en"
       ]
+    },
+    {
+      "id": "moviebox",
+      "name": "MovieBox",
+      "description": "High-quality streams from MovieBox with multiple language dubs and authentication cookies",
+      "version": "1.0.0",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/moviebox.js",
+      "enabled": true,
+      "formats": ["m3u8", "mpd", "mp4"],
+      "logo": "https://api.inmoviebox.com/favicon.ico",
+      "contentLanguage": [
+        "en",
+        "hi",
+        "es",
+        "fr",
+        "de",
+        "it",
+        "pt",
+        "ru",
+        "ja",
+        "ko"
+      ]
+    },
+    {
+      "id": "streamflix",
+      "name": "StreamFlix",
+      "description": "High-quality movie and TV show streams from StreamFlix API with WebSocket episode fetching",
+      "version": "1.0.0",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/streamflix.js",
+      "enabled": true,
+      "formats": ["mkv", "mp4"],
+      "logo": "https://streamflix.app/assets/images/streamflix-1.svg",
+      "contentLanguage": [
+        "en"
+      ]
     }
   ]
 }
