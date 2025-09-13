@@ -1,8 +1,7 @@
 const CryptoJS = require('crypto-js');
 
-const PRIMARY_KEY = '76iRl07s0xSN9jqmEWAt79EBJZulIQIsV64FZr2O';
+// PRIMARY_KEY, BASE_URL, and TMDB_API_KEY are injected by the sandbox environment
 const BASE_URL = 'https://api.inmoviebox.com/wefeed-mobile-bff';
-const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 
 function md5Hex(data) {
     return CryptoJS.MD5(data).toString(CryptoJS.enc.Hex);
