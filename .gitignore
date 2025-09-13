@@ -100,7 +100,6 @@ dahmer-movies-fetcher.js
 test_xprime.js
 m3u8-resolver.js
 xprime-scraper.js
-providers/moviebox.js
 test-api/cache/data.json
 test-api/cache/config.json
 test-api/series.py
@@ -111,3 +110,4 @@ providers/moviebox-standalone.js
 test_moviebox.js
 manifest.json
 api.js
+providers/moviebox.js
