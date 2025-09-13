@@ -110,4 +110,4 @@ providers/moviebox-standalone.js
 test_moviebox.js
 manifest.json
 api.js
-providers/moviebox.js
+
