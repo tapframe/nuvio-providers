@@ -185,7 +185,7 @@
       "id": "moviebox",
       "name": "MovieBox",
       "description": "High-quality streams from MovieBox with multiple language dubs and authentication cookies",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": "Nuvio Team",
       "supportedTypes": [
         "movie",
