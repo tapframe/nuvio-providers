@@ -56,6 +56,7 @@ function getTmdbInfo(tmdbId, mediaType) {
 // Helper function to parse M3U8 playlist
 function parseM3U8Playlist(content, baseUrl) {
     const streams = [];
+    const audioTracks = [];
     const lines = content.split('\n');
 
     let currentStream = null;
@@ -63,6 +64,7 @@ function parseM3U8Playlist(content, baseUrl) {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
 
+        // Parse video streams
         if (line.startsWith('#EXT-X-STREAM-INF:')) {
             // Parse stream info
             const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/);
@@ -77,15 +79,41 @@ function parseM3U8Playlist(content, baseUrl) {
                     url: ''
                 };
             }
-        } else if (line.startsWith('http') && currentStream) {
-            // This is the URL for the current stream
+        } 
+        // Parse audio tracks
+        else if (line.startsWith('#EXT-X-MEDIA:')) {
+            const typeMatch = line.match(/TYPE=([^,]+)/);
+            const nameMatch = line.match(/NAME="([^"]+)"/);
+            const groupIdMatch = line.match(/GROUP-ID="([^"]+)"/);
+            const languageMatch = line.match(/LANGUAGE="([^"]+)"/);
+            const uriMatch = line.match(/URI="([^"]+)"/);
+
+            if (typeMatch && typeMatch[1] === 'AUDIO') {
+                const audioTrack = {
+                    type: 'audio',
+                    name: nameMatch ? nameMatch[1] : 'Unknown Audio',
+                    groupId: groupIdMatch ? groupIdMatch[1] : 'unknown',
+                    language: languageMatch ? languageMatch[1] : 'unknown',
+                    url: uriMatch ? resolveUrl(uriMatch[1], baseUrl) : null
+                };
+                audioTracks.push(audioTrack);
+            }
+        }
+        // Handle URLs for video streams
+        else if (line.startsWith('http') && currentStream) {
+            // This is the URL for the current video stream
             currentStream.url = line.startsWith('http') ? line : resolveUrl(line, baseUrl);
             streams.push(currentStream);
             currentStream = null;
         }
     }
 
-    return streams;
+    console.log(`[Vixsrc] Found ${audioTracks.length} audio tracks:`);
+    audioTracks.forEach((track, index) => {
+        console.log(`   ${index + 1}. ${track.name} (${track.language}) - ${track.url ? 'Available' : 'No URL'}`);
+    });
+
+    return { streams, audioTracks };
 }
 
 // Helper function to get quality from resolution
@@ -269,7 +297,7 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
         .then(response => response.text())
         .then(playlistContent => {
             console.log('[Vixsrc] Parsing master playlist...');
-            const qualityStreams = parseM3U8Playlist(playlistContent, masterPlaylistUrl);
+            const { streams: qualityStreams, audioTracks } = parseM3U8Playlist(playlistContent, masterPlaylistUrl);
 
             if (qualityStreams.length === 0) {
                 console.log('[Vixsrc] No quality streams found in playlist, using master playlist directly');
@@ -302,10 +330,32 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
                     headers: {
                         'Referer': BASE_URL,
                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-                    }
+                    },
+                    audioTracks: audioTracks.length > 0 ? audioTracks : undefined
                 }));
 
-                console.log(`[Vixsrc] Successfully processed ${nuvioStreams.length} streams`);
+                // Add separate audio track entries if available
+                if (audioTracks.length > 0) {
+                    const audioStreams = audioTracks.map(track => ({
+                        name: "Vixsrc Audio",
+                        title: `${track.name} (${track.language})`,
+                        url: track.url,
+                        quality: 'Audio',
+                        type: 'direct',
+                        headers: {
+                            'Referer': BASE_URL,
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                        },
+                        audioTrack: {
+                            name: track.name,
+                            language: track.language,
+                            groupId: track.groupId
+                        }
+                    }));
+                    nuvioStreams.push(...audioStreams);
+                }
+
+                console.log(`[Vixsrc] Successfully processed ${nuvioStreams.length} streams (${qualityStreams.length} video + ${audioTracks.length} audio)`);
                 return nuvioStreams;
             });
         });

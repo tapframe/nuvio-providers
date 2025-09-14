@@ -33,6 +33,15 @@ async function testVixsrc() {
       if (stream.headers) {
         console.log(`   Headers: ${JSON.stringify(stream.headers)}`);
       }
+      if (stream.audioTracks) {
+        console.log(`   Audio Tracks: ${stream.audioTracks.length} available`);
+        stream.audioTracks.forEach((track, trackIndex) => {
+          console.log(`     ${trackIndex + 1}. ${track.name} (${track.language}) - ${track.url ? 'Available' : 'No URL'}`);
+        });
+      }
+      if (stream.audioTrack) {
+        console.log(`   Audio Track Info: ${stream.audioTrack.name} (${stream.audioTrack.language})`);
+      }
       console.log('');
     });
     
