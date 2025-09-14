@@ -320,42 +320,44 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
             // Get subtitles
             return getSubtitles(subtitleApiUrl)
             .then(subtitles => {
-                // Convert to Nuvio format
-                const nuvioStreams = qualityStreams.map(stream => ({
-                    name: "Vixsrc",
-                    title: `${stream.quality} Stream (${stream.resolution})`,
-                    url: stream.url,
-                    quality: stream.quality,
-                    type: 'direct',
-                    headers: {
-                        'Referer': BASE_URL,
-                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-                    },
-                    audioTracks: audioTracks.length > 0 ? audioTracks : undefined
-                }));
-
-                // Add separate audio track entries if available
-                if (audioTracks.length > 0) {
-                    const audioStreams = audioTracks.map(track => ({
-                        name: "Vixsrc Audio",
-                        title: `${track.name} (${track.language})`,
-                        url: track.url,
-                        quality: 'Audio',
+                // Convert to Nuvio format with combined audio/video streams
+                const nuvioStreams = qualityStreams.map(stream => {
+                    // Create a combined M3U8 URL that includes both video and audio
+                    let combinedUrl = stream.url;
+                    
+                    // If we have audio tracks, modify the URL to include audio parameters
+                    if (audioTracks.length > 0) {
+                        // Add audio track parameters to the URL
+                        const audioParams = audioTracks.map(track => 
+                            `audio=${encodeURIComponent(track.url)}&audio_lang=${track.language}`
+                        ).join('&');
+                        
+                        // Add audio parameters to the stream URL
+                        const separator = stream.url.includes('?') ? '&' : '?';
+                        combinedUrl = `${stream.url}${separator}${audioParams}&combined=true`;
+                    }
+                    
+                    return {
+                        name: "Vixsrc",
+                        title: `${stream.quality} Stream (${stream.resolution})`,
+                        url: combinedUrl,
+                        quality: stream.quality,
                         type: 'direct',
                         headers: {
                             'Referer': BASE_URL,
                             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
                         },
-                        audioTrack: {
-                            name: track.name,
-                            language: track.language,
-                            groupId: track.groupId
-                        }
-                    }));
-                    nuvioStreams.push(...audioStreams);
-                }
+                        // Include original video URL and audio tracks for reference
+                        originalVideoUrl: stream.url,
+                        audioTracks: audioTracks.length > 0 ? audioTracks : undefined,
+                        // Mark this as a combined stream
+                        isCombined: audioTracks.length > 0,
+                        // Include subtitle URL if available
+                        subtitles: subtitles || undefined
+                    };
+                });
 
-                console.log(`[Vixsrc] Successfully processed ${nuvioStreams.length} streams (${qualityStreams.length} video + ${audioTracks.length} audio)`);
+                console.log(`[Vixsrc] Successfully processed ${nuvioStreams.length} combined streams (${qualityStreams.length} video qualities with ${audioTracks.length} audio tracks)`);
                 return nuvioStreams;
             });
         });
