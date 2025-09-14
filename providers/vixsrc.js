@@ -267,60 +267,6 @@ function getSubtitles(subtitleApiUrl) {
     });
 }
 
-// Helper function to create combined M3U8 content for a specific quality
-function createCombinedM3U8ForQuality(videoStream, audioTracks, subtitles) {
-    const lines = [];
-    
-    // M3U8 header
-    lines.push('#EXTM3U');
-    lines.push('#EXT-X-VERSION:3');
-    lines.push('#EXT-X-INDEPENDENT-SEGMENTS');
-    lines.push('');
-    
-    // Add audio tracks as media groups
-    if (audioTracks.length > 0) {
-        lines.push('# Audio Tracks');
-        audioTracks.forEach((track, index) => {
-            const isDefault = index === 0 ? ',DEFAULT=YES,AUTOSELECT=YES' : '';
-            lines.push(`#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${track.name}",LANGUAGE="${track.language}"${isDefault},URI="${track.url}"`);
-        });
-        lines.push('');
-    }
-    
-    // Add subtitles if available
-    if (subtitles) {
-        lines.push('# Subtitles');
-        lines.push(`#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subtitles",NAME="English",DEFAULT=YES,AUTOSELECT=YES,FORCED=NO,LANGUAGE="eng",URI="${subtitles}"`);
-        lines.push('');
-    }
-    
-    // Add the video stream with audio reference
-    const audioGroupRef = audioTracks.length > 0 ? ',AUDIO="audio"' : '';
-    const subtitleGroupRef = subtitles ? ',SUBTITLES="subtitles"' : '';
-    const codecs = getCodecsForQuality(videoStream.quality);
-    
-    lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${videoStream.bandwidth},RESOLUTION=${videoStream.resolution},CODECS="${codecs}"${audioGroupRef}${subtitleGroupRef}`);
-    lines.push(videoStream.url);
-    
-    return lines.join('\n');
-}
-
-// Helper function to get appropriate codecs for quality
-function getCodecsForQuality(quality) {
-    switch (quality) {
-        case '1080p':
-            return 'avc1.640028,mp4a.40.2';
-        case '720p':
-            return 'avc1.4D401F,mp4a.40.2';
-        case '480p':
-            return 'avc1.42C01E,mp4a.40.2';
-        case '360p':
-            return 'avc1.42C01E,mp4a.40.5';
-        default:
-            return 'avc1.4D401F,mp4a.40.2';
-    }
-}
-
 // Main function to get streams - adapted for Nuvio provider format
 function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = null) {
     console.log(`[Vixsrc] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}`);
@@ -340,76 +286,27 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
 
         const { masterPlaylistUrl, subtitleApiUrl } = streamData;
 
-        // Fetch and parse the master playlist to get all quality options
-        console.log('[Vixsrc] Fetching master playlist...');
-        return makeRequest(masterPlaylistUrl, {
-            headers: {
-                'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL,*/*',
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-            }
-        })
-        .then(response => response.text())
-        .then(playlistContent => {
-            console.log('[Vixsrc] Parsing master playlist...');
-            const { streams: qualityStreams, audioTracks } = parseM3U8Playlist(playlistContent, masterPlaylistUrl);
+        // Return single master playlist with Auto quality
+        console.log('[Vixsrc] Returning master playlist with Auto quality...');
+        
+        // Get subtitles
+        return getSubtitles(subtitleApiUrl)
+        .then(subtitles => {
+            // Return single stream with master playlist
+            const nuvioStreams = [{
+                name: "Vixsrc",
+                title: "Auto Quality Stream",
+                url: masterPlaylistUrl,
+                quality: 'Auto',
+                type: 'direct',
+                headers: {
+                    'Referer': BASE_URL,
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                }
+            }];
 
-            if (qualityStreams.length === 0) {
-                console.log('[Vixsrc] No quality streams found in playlist, using master playlist directly');
-                qualityStreams.push({
-                    quality: 'Auto',
-                    resolution: 'Auto',
-                    url: masterPlaylistUrl,
-                    bandwidth: 0
-                });
-            }
-
-            // Sort streams by bandwidth (quality) - highest first
-            qualityStreams.sort((a, b) => b.bandwidth - a.bandwidth);
-
-            console.log(`[Vixsrc] Found ${qualityStreams.length} quality options:`);
-            qualityStreams.forEach((stream, index) => {
-                console.log(`   ${index + 1}. ${stream.quality} (${stream.resolution}) - ${Math.round(stream.bandwidth / 1000)}kbps`);
-            });
-
-            // Get subtitles
-            return getSubtitles(subtitleApiUrl)
-            .then(subtitles => {
-                // Create individual M3U8 files for each quality with embedded audio tracks
-                const nuvioStreams = qualityStreams.map(stream => {
-                    // Create a combined M3U8 content for this specific quality
-                    const combinedM3U8Content = createCombinedM3U8ForQuality(stream, audioTracks, subtitles);
-                    
-                    // Create a data URL for the M3U8 content
-                    const fileName = `vixsrc_${tmdbId}_${stream.quality}.m3u8`;
-                    const dataUrl = `data:application/vnd.apple.mpegurl;charset=utf-8,${encodeURIComponent(combinedM3U8Content)}`;
-                    
-                    return {
-                        name: "Vixsrc",
-                        title: `${stream.quality} Stream (${stream.resolution})`,
-                        url: dataUrl,
-                        quality: stream.quality,
-                        type: 'direct',
-                        headers: {
-                            'Referer': BASE_URL,
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                            'Content-Type': 'application/vnd.apple.mpegurl'
-                        },
-                        // Include original video URL and audio tracks for reference
-                        originalVideoUrl: stream.url,
-                        audioTracks: audioTracks.length > 0 ? audioTracks : undefined,
-                        // Mark this as a combined stream
-                        isCombined: audioTracks.length > 0,
-                        // Include subtitle URL if available
-                        subtitles: subtitles || undefined,
-                        // Include M3U8 content for local storage
-                        m3u8Content: combinedM3U8Content,
-                        fileName: fileName
-                    };
-                });
-
-                console.log(`[Vixsrc] Successfully processed ${nuvioStreams.length} combined streams (${qualityStreams.length} video qualities with ${audioTracks.length} audio tracks)`);
-                return nuvioStreams;
-            });
+            console.log('[Vixsrc] Successfully processed 1 stream with Auto quality');
+            return nuvioStreams;
         });
     })
     .catch(error => {
