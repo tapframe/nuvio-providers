@@ -225,6 +225,24 @@
       "contentLanguage": [
         "en"
       ]
+    },
+    {
+      "id": "vixsrc",
+      "name": "Vixsrc",
+      "description": "High-quality M3U8 streaming links from Vixsrc.to with multiple quality options and subtitle support",
+      "version": "1.0.0",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/vixsrc.js",
+      "enabled": true,
+      "formats": ["m3u8"],
+      "logo": "https://vixsrc.to/favicon.ico",
+      "contentLanguage": [
+        "en"
+      ]
     }
   ]
 }
