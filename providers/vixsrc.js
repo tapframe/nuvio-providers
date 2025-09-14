@@ -379,14 +379,14 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
                     // Create a combined M3U8 content for this specific quality
                     const combinedM3U8Content = createCombinedM3U8ForQuality(stream, audioTracks, subtitles);
                     
-                    // Create a local file URL for the M3U8 content
+                    // Create a data URL for the M3U8 content
                     const fileName = `vixsrc_${tmdbId}_${stream.quality}.m3u8`;
-                    const localUrl = fileName; // Will be converted to full path by LocalM3U8Manager
+                    const dataUrl = `data:application/vnd.apple.mpegurl;charset=utf-8,${encodeURIComponent(combinedM3U8Content)}`;
                     
                     return {
                         name: "Vixsrc",
                         title: `${stream.quality} Stream (${stream.resolution})`,
-                        url: localUrl,
+                        url: dataUrl,
                         quality: stream.quality,
                         type: 'direct',
                         headers: {
