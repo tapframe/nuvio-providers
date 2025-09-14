@@ -381,7 +381,7 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
                     
                     // Create a local file URL for the M3U8 content
                     const fileName = `vixsrc_${tmdbId}_${stream.quality}.m3u8`;
-                    const localUrl = `nuvio-m3u8://${fileName}`;
+                    const localUrl = `file://${fileName}`;
                     
                     return {
                         name: "Vixsrc",
