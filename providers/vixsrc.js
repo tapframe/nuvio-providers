@@ -267,6 +267,60 @@ function getSubtitles(subtitleApiUrl) {
     });
 }
 
+// Helper function to create combined M3U8 content for a specific quality
+function createCombinedM3U8ForQuality(videoStream, audioTracks, subtitles) {
+    const lines = [];
+    
+    // M3U8 header
+    lines.push('#EXTM3U');
+    lines.push('#EXT-X-VERSION:3');
+    lines.push('#EXT-X-INDEPENDENT-SEGMENTS');
+    lines.push('');
+    
+    // Add audio tracks as media groups
+    if (audioTracks.length > 0) {
+        lines.push('# Audio Tracks');
+        audioTracks.forEach((track, index) => {
+            const isDefault = index === 0 ? ',DEFAULT=YES,AUTOSELECT=YES' : '';
+            lines.push(`#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${track.name}",LANGUAGE="${track.language}"${isDefault},URI="${track.url}"`);
+        });
+        lines.push('');
+    }
+    
+    // Add subtitles if available
+    if (subtitles) {
+        lines.push('# Subtitles');
+        lines.push(`#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subtitles",NAME="English",DEFAULT=YES,AUTOSELECT=YES,FORCED=NO,LANGUAGE="eng",URI="${subtitles}"`);
+        lines.push('');
+    }
+    
+    // Add the video stream with audio reference
+    const audioGroupRef = audioTracks.length > 0 ? ',AUDIO="audio"' : '';
+    const subtitleGroupRef = subtitles ? ',SUBTITLES="subtitles"' : '';
+    const codecs = getCodecsForQuality(videoStream.quality);
+    
+    lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${videoStream.bandwidth},RESOLUTION=${videoStream.resolution},CODECS="${codecs}"${audioGroupRef}${subtitleGroupRef}`);
+    lines.push(videoStream.url);
+    
+    return lines.join('\n');
+}
+
+// Helper function to get appropriate codecs for quality
+function getCodecsForQuality(quality) {
+    switch (quality) {
+        case '1080p':
+            return 'avc1.640028,mp4a.40.2';
+        case '720p':
+            return 'avc1.4D401F,mp4a.40.2';
+        case '480p':
+            return 'avc1.42C01E,mp4a.40.2';
+        case '360p':
+            return 'avc1.42C01E,mp4a.40.5';
+        default:
+            return 'avc1.4D401F,mp4a.40.2';
+    }
+}
+
 // Main function to get streams - adapted for Nuvio provider format
 function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = null) {
     console.log(`[Vixsrc] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}`);
@@ -320,32 +374,25 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
             // Get subtitles
             return getSubtitles(subtitleApiUrl)
             .then(subtitles => {
-                // Convert to Nuvio format with combined audio/video streams
+                // Create individual M3U8 files for each quality with embedded audio tracks
                 const nuvioStreams = qualityStreams.map(stream => {
-                    // Create a combined M3U8 URL that includes both video and audio
-                    let combinedUrl = stream.url;
+                    // Create a combined M3U8 content for this specific quality
+                    const combinedM3U8Content = createCombinedM3U8ForQuality(stream, audioTracks, subtitles);
                     
-                    // If we have audio tracks, modify the URL to include audio parameters
-                    if (audioTracks.length > 0) {
-                        // Add audio track parameters to the URL
-                        const audioParams = audioTracks.map(track => 
-                            `audio=${encodeURIComponent(track.url)}&audio_lang=${track.language}`
-                        ).join('&');
-                        
-                        // Add audio parameters to the stream URL
-                        const separator = stream.url.includes('?') ? '&' : '?';
-                        combinedUrl = `${stream.url}${separator}${audioParams}&combined=true`;
-                    }
+                    // Create a local file URL for the M3U8 content
+                    const fileName = `vixsrc_${tmdbId}_${stream.quality}.m3u8`;
+                    const localUrl = `nuvio-m3u8://${fileName}`;
                     
                     return {
                         name: "Vixsrc",
                         title: `${stream.quality} Stream (${stream.resolution})`,
-                        url: combinedUrl,
+                        url: localUrl,
                         quality: stream.quality,
                         type: 'direct',
                         headers: {
                             'Referer': BASE_URL,
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                            'Content-Type': 'application/vnd.apple.mpegurl'
                         },
                         // Include original video URL and audio tracks for reference
                         originalVideoUrl: stream.url,
@@ -353,7 +400,10 @@ function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = 
                         // Mark this as a combined stream
                         isCombined: audioTracks.length > 0,
                         // Include subtitle URL if available
-                        subtitles: subtitles || undefined
+                        subtitles: subtitles || undefined,
+                        // Include M3U8 content for local storage
+                        m3u8Content: combinedM3U8Content,
+                        fileName: fileName
                     };
                 });
 
