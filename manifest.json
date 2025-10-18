@@ -339,6 +339,25 @@
         "es",
         "pt"
       ]
+    },
+    {
+      "id": "hianime",
+      "name": "HiAnime",
+      "description": "HiAnime anime streaming with multi-server support and quality options",
+      "version": "1.0.1",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/hianime.js",
+      "enabled": true,
+      "limited": true,
+      "formats": ["m3u8", "mp4"],
+      "logo": "https://hianime.to/favicon.ico",
+      "contentLanguage": [
+        "en",
+        "ja"
+      ]
     }
   ]
 }
