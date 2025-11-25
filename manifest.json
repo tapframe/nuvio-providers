@@ -185,8 +185,8 @@
       "supportsExternalPlayer": false
     },
     {
-      "id": "vidsrc",
-      "name": "VidSrc",
+      "id": "animepahe",
+      "name": "AnimePahe",
       "description": "VidSrc M3U8 streaming with multiple server support",
       "version": "1.0.0",
       "author": "Nuvio Team",
@@ -194,8 +194,8 @@
         "movie",
         "tv"
       ],
-      "filename": "providers/vidsrc.js",
-      "enabled": false,
+      "filename": "providers/animepahe.js",
+      "enabled": true,
       "logo": "https://vidsrc.xyz/template/vidsrc-ico.png",
       "contentLanguage": [
         "en"
