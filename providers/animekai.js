@@ -1,16 +1,16 @@
 // AnimeKai Scraper for Nuvio Local Scrapers
-// FULLY FIXED: Movies/TV Support + Kotlin-style Subtitle Extraction + Cloudflare Fix
+// VERSION: 3.0 (Movies/TV + Enhanced Subtitles + Cloudflare Bypass)
 
 // TMDB API Configuration
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 // CONFIGURATION
-// We use 'anikai.to' as it is the currently active mirror used by the Kotlin app.
+// using 'anikai.to' as it is the currently active mirror from Kotlin source
 const BASE_DOMAIN = 'https://anikai.to'; 
 
-// HEADERS: Matched to Kotlin Source (Mobile UA + Referer)
-// Critical for bypassing "Access Denied" blocks
+// HEADERS: Exact match to Kotlin source (Mobile UA + Referer)
+// Essential for bypassing "Access Denied" / 403 errors
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36',
     'Referer': BASE_DOMAIN + '/',
@@ -40,10 +40,11 @@ function fetchRequest(url, options) {
     });
 }
 
-// Helper: Determine subtitle type for Nuvio player
+// HELPER: Detect subtitle format for Nuvio Player
+// Player requires explicit 'vtt' or 'srt' type
 function getSubType(url) {
     if (url.indexOf('.srt') !== -1) return 'srt';
-    return 'vtt'; // Default to vtt (standard for web)
+    return 'vtt'; // Default to vtt as it's the web standard
 }
 
 // --- Encryption/Decryption Middleware ---
@@ -75,7 +76,7 @@ function parseHtmlViaApi(html) {
 
 // --- Subtitle & Stream Extraction Logic ---
 
-// LOGIC 1: API Subtitle Extraction (Matches Kotlin's 'MegaUpResult.subtitleTracks')
+// LOGIC 1: API Extraction (MegaUp JSON)
 function decryptMegaMedia(embedUrl) {
     var mediaUrl;
     if (embedUrl.indexOf('/e/') !== -1) {
@@ -97,7 +98,7 @@ function decryptMegaMedia(embedUrl) {
         .then(function(json) {
             var result = json.result;
             
-            // Extract sources (video files)
+            // 1. Extract Video Sources
             var srcs = [];
             if (result && result.sources) {
                 for (var i = 0; i < result.sources.length; i++) {
@@ -109,22 +110,24 @@ function decryptMegaMedia(embedUrl) {
                 }
             }
 
-            // Extract Subtitles from API
-            // Replicates Kotlin filter: it.kind == "captions" && it.file.endsWith(".vtt")
+            // 2. Extract Subtitles
+            // REQUIREMENTS MET:
+            // - Checks for 'captions' OR 'subtitles' (Loosened filter)
+            // - Adds 'type': 'vtt'/'srt'
+            // - Adds 'title': Label for UI
             var subs = [];
             if (result && result.tracks) {
                 subs = result.tracks
                     .filter(function(t) { 
-                        // We check for both captions and subtitles to be safe
                         return (t.kind === 'captions' || t.kind === 'subtitles');
                     })
                     .map(function(t) {
                         var label = t.label || 'English';
                         return { 
-                            title: label,       // For Nuvio UI
-                            language: label,    // Lang Code
+                            title: label,       // Display Name in Player
+                            language: label,    // Language Code/Name
                             url: t.file, 
-                            type: getSubType(t.file) 
+                            type: getSubType(t.file) // Explicit format
                         };
                     });
             }
@@ -133,7 +136,7 @@ function decryptMegaMedia(embedUrl) {
         });
 }
 
-// LOGIC 2: M3U8 Subtitle Extraction (Replicates Kotlin's 'PlaylistUtils.extractFromHls')
+// LOGIC 2: M3U8 Extraction (Internal Playlist Scan)
 function resolveM3U8(url, serverType) {
     return fetchRequest(url, { headers: Object.assign({}, HEADERS, { 'Accept': '*/*' }) })
         .then(function(res) { return res.text(); })
@@ -141,13 +144,13 @@ function resolveM3U8(url, serverType) {
             var streams = [];
             var subtitles = [];
 
-            // We scan the M3U8 text manually because we don't have the Kotlin library
+            // Manual M3U8 Parsing
             if (content.indexOf('#EXT-X-STREAM-INF') !== -1 || content.indexOf('#EXT-X-MEDIA') !== -1) {
                 var lines = content.split('\n');
                 for (var i = 0; i < lines.length; i++) {
                     var line = lines[i].trim();
                     
-                    // A. Video Streams extraction
+                    // A. Video Streams
                     if (line.indexOf('#EXT-X-STREAM-INF') === 0 && lines[i+1]) {
                         var resMatch = line.match(/RESOLUTION=\d+x(\d+)/);
                         var bwMatch = line.match(/BANDWIDTH=(\d+)/);
@@ -169,8 +172,8 @@ function resolveM3U8(url, serverType) {
                         }
                     }
                     
-                    // B. Subtitle extraction (The "PlaylistUtils" logic)
-                    // We look for #EXT-X-MEDIA:TYPE=SUBTITLES
+                    // B. Subtitles inside M3U8
+                    // Regex scan for URI, NAME, LANGUAGE
                     if (line.indexOf('#EXT-X-MEDIA:TYPE=SUBTITLES') === 0) {
                         var uriMatch = line.match(/URI="([^"]+)"/);
                         var nameMatch = line.match(/NAME="([^"]+)"/);
@@ -181,10 +184,10 @@ function resolveM3U8(url, serverType) {
                             var label = (nameMatch ? nameMatch[1] : null) || (langMatch ? langMatch[1] : 'Unknown');
                             
                             subtitles.push({
+                                title: label,           // Display Name
+                                language: label,        // Lang Code
                                 url: subUrl,
-                                title: label,
-                                language: label,
-                                type: getSubType(subUrl)
+                                type: getSubType(subUrl) // Explicit format
                             });
                         }
                     }
@@ -192,6 +195,7 @@ function resolveM3U8(url, serverType) {
                 return { success: true, streams: streams, subtitles: subtitles };
             }
             
+            // Fallback for simple m3u8
             return { success: true, streams: [{ url: url, quality: 'Unknown', serverType: serverType }], subtitles: [] };
         })
         .catch(function(){ return { success: false, streams: [{ url: url, quality: 'Unknown', serverType: serverType }], subtitles: [] }; });
@@ -266,7 +270,7 @@ function searchKitsu(animeTitle) {
 function searchAnimeByName(animeName, type) {
     var searchUrl = BASE_DOMAIN + '/browser?keyword=' + encodeURIComponent(animeName);
     
-    // Kotlin-style filter: &type[]=movie OR &type[]=tv
+    // MOVIE SUPPORT: Kotlin-style filter
     if (type === 'movie') {
         searchUrl += '&type[]=movie';
     } else {
@@ -317,7 +321,7 @@ function getAccurateAnimeKaiEntry(animeTitle, season, episode, tmdbId, type) {
 function pickResult(results, mediaType, season, tmdbId) {
     if (!results || results.length === 0) return Promise.resolve(null);
     
-    // For movies, we just take the first match (since we already filtered by type=movie)
+    // For movies, accept first match from the 'type=movie' filter
     if (mediaType === 'movie') {
         return Promise.resolve(results[0]);
     }
@@ -439,13 +443,12 @@ function extractContentIdFromSlug(slugUrl) {
 
 function formatToNuvioStreams(formattedData, mediaTitle) {
     var links = [];
-    // Ensure subtitles exist
     var subs = formattedData && formattedData.subtitles ? formattedData.subtitles : [];
     var streams = formattedData && formattedData.streams ? formattedData.streams : [];
     
     var headers = {
         'User-Agent': HEADERS['User-Agent'],
-        'Referer': HEADERS['Referer'], // Critical for video playback
+        'Referer': HEADERS['Referer'], // Critical for playback
         'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
     };
 
@@ -460,7 +463,7 @@ function formatToNuvioStreams(formattedData, mediaTitle) {
             quality: quality,
             size: 'Unknown',
             headers: headers,
-            subtitles: subs, // Attach valid subtitle array here
+            subtitles: subs, // Attached here
             provider: 'animekai'
         });
     }
@@ -578,7 +581,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
                                 return { streams: [], subtitles: [] };
                             })
                             .then(function(decryptedData) {
-                                // Mark server type
+                                // Add serverType to streams for naming
                                 if (decryptedData.streams) {
                                     decryptedData.streams.forEach(function(s) { s.serverType = serverType; });
                                 }
