@@ -1,17 +1,14 @@
 // AnimeKai Scraper for Nuvio Local Scrapers
-// FIXED VERSION: Movies + TV, Subtitles (M3U8/API), Cloudflare Bypass
+// FIXED VERSION: Movies+TV, Subtitles (Type/Title Fix), Cloudflare Bypass
 
 // TMDB API Configuration
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
-// CONFIGURATION - FIXED
-// ---------------------
-// We use 'anikai.to' as it is the currently active mirror.
+// CONFIGURATION
 const BASE_DOMAIN = 'https://anikai.to'; 
 
-// CRITICAL FIX: Matched User-Agent to the working Kotlin source [source: 48]
-// Added 'Referer' which is required to bypass "Access Denied" errors.
+// CRITICAL HEADERS: Mobile UA + Referer required for access
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36',
     'Referer': BASE_DOMAIN + '/',
@@ -22,14 +19,15 @@ const HEADERS = {
 const API = 'https://enc-dec.app/api';
 const KAI_AJAX = BASE_DOMAIN + '/ajax';
 
-// Kitsu API Configuration
+// Kitsu API (for better title mapping)
 const KITSU_BASE_URL = 'https://kitsu.io/api/edge';
 const KITSU_HEADERS = {
     'Accept': 'application/vnd.api+json',
     'Content-Type': 'application/vnd.api+json'
 };
 
-// Generic fetch helper
+// --- Helpers ---
+
 function fetchRequest(url, options) {
     const merged = Object.assign({ method: 'GET', headers: HEADERS }, options || {});
     return fetch(url, merged).then(function(response) {
@@ -38,6 +36,12 @@ function fetchRequest(url, options) {
         }
         return response;
     });
+}
+
+// Helper to determine subtitle type for Nuvio player
+function getSubType(url) {
+    if (url.indexOf('.srt') !== -1) return 'srt';
+    return 'vtt'; // Default to vtt as it's most common on web
 }
 
 // --- Encryption/Decryption Middleware ---
@@ -67,7 +71,7 @@ function parseHtmlViaApi(html) {
       .then(function(json) { return json.result; });
 }
 
-// FIX: Improved MegaUp logic with strict subtitle filtering
+// FIX: Improved MegaUp logic with Loosened Subtitle Filter & Title/Type properties
 function decryptMegaMedia(embedUrl) {
     var mediaUrl;
     if (embedUrl.indexOf('/e/') !== -1) {
@@ -101,18 +105,24 @@ function decryptMegaMedia(embedUrl) {
                 }
             }
 
-            // FILTER SUBTITLES (Strict filter matching Kotlin)
+            // FILTER SUBTITLES
+            // Fixes: 
+            // 1. Accepts 'subtitles' OR 'captions' (Loosened filter)
+            // 2. Adds 'title' property for Nuvio UI
+            // 3. Adds 'type' property (vtt/srt)
             var subs = [];
             if (result && result.tracks) {
                 subs = result.tracks
                     .filter(function(t) { 
-                        return t.kind === 'captions' && (t.file.indexOf('.vtt') !== -1 || t.file.indexOf('.srt') !== -1);
+                        return (t.kind === 'captions' || t.kind === 'subtitles');
                     })
                     .map(function(t) {
+                        var label = t.label || 'English';
                         return { 
-                            language: t.label || 'English', 
+                            title: label,       // Display Name
+                            language: label,    // Lang code/name
                             url: t.file, 
-                            lang: t.label || 'English'
+                            type: getSubType(t.file) // vtt or srt
                         };
                     });
             }
@@ -153,7 +163,6 @@ function searchKitsu(animeTitle) {
         });
 }
 
-// FIX: Added 'type' parameter
 function searchAnimeByName(animeName, type) {
     var searchUrl = BASE_DOMAIN + '/browser?keyword=' + encodeURIComponent(animeName);
     
@@ -250,7 +259,7 @@ function pickResult(results, mediaType, season, tmdbId) {
     return Promise.resolve(candidates.length > 0 ? candidates.sort(function(a,b){ return b.score - a.score; })[0].r : results[0]);
 }
 
-// --- Quality & M3U8 Logic (With Subtitles) ---
+// --- Quality & M3U8 Logic (With M3U8 Subtitle Extraction) ---
 
 function extractQualityFromUrl(url) {
     var patterns = [
@@ -308,6 +317,7 @@ function resolveM3U8(url, serverType) {
                     }
                     
                     // 2. Subtitles inside M3U8
+                    // Regex scan for URI, NAME, LANGUAGE
                     if (line.indexOf('#EXT-X-MEDIA:TYPE=SUBTITLES') === 0) {
                         var uriMatch = line.match(/URI="([^"]+)"/);
                         var nameMatch = line.match(/NAME="([^"]+)"/);
@@ -316,10 +326,12 @@ function resolveM3U8(url, serverType) {
                         if (uriMatch) {
                             var subUrl = resolveUrlRelative(uriMatch[1], url);
                             var label = (nameMatch ? nameMatch[1] : null) || (langMatch ? langMatch[1] : 'Unknown');
+                            
                             subtitles.push({
                                 url: subUrl,
+                                title: label,    // Added title
                                 language: label,
-                                lang: label
+                                type: getSubType(subUrl) // Added type
                             });
                         }
                     }
@@ -565,7 +577,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
                                 return { streams: [], subtitles: [] };
                             })
                             .then(function(decryptedData) {
-                                // Add serverType to streams
+                                // Add serverType to streams for naming
                                 if (decryptedData.streams) {
                                     decryptedData.streams.forEach(function(s) { s.serverType = serverType; });
                                 }
@@ -591,11 +603,12 @@ function getStreams(tmdbId, mediaType, season, episode) {
                     var m3u8Links = allStreams.filter(function(s){ return s && s.url && s.url.indexOf('.m3u8') !== -1; });
                     var directLinks = allStreams.filter(function(s){ return !(s && s.url && s.url.indexOf('.m3u8') !== -1); });
 
+                    // Resolve M3U8 links for more streams AND subtitles
                     return resolveMultipleM3U8(m3u8Links).then(function(resolutionResult) {
                         var combinedStreams = directLinks.concat(resolutionResult.streams);
                         var combinedSubs = apiSubs.concat(resolutionResult.subtitles);
 
-                        // Deduplicate subs
+                        // Deduplicate subs by URL
                         var uniqueSubs = [];
                         var seen = {};
                         for (var j = 0; j < combinedSubs.length; j++) {
@@ -609,6 +622,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
                         var mediaTitle = buildMediaTitle(mediaInfo, mediaType, targetSeason, targetEpisode, result.episodeInfo);
                         var formatted = formatToNuvioStreams({ streams: combinedStreams, subtitles: uniqueSubs }, mediaTitle);
                         
+                        // Rough Sort
                         var order = { '1080p': 5, '720p': 4, '480p': 3, '360p': 2, '240p': 1, 'Unknown': 0 };
                         formatted.sort(function(a, b) { return (order[b.quality] || 0) - (order[a.quality] || 0); });
                         return formatted;
