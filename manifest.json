@@ -29,6 +29,7 @@
       "version": "1.0.1",
       "author": "Nuvio Team",
       "supportedTypes": [
+        "movie",
         "tv"
       ],
       "filename": "providers/animekai.js",
