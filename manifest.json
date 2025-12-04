@@ -23,18 +23,6 @@
       ]
     },
     {
-      "id": "streamplay",
-      "name": "StreamPlay",
-      "description": "Aggregator of HTTPS providers (Rido, UHD, MoviesMod, VidSrc)",
-      "version": "1.0.0",
-      "author": "Nuvio Team",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "providers/streamplay.js",
-      "enabled": true,
-      "logo": "https://play-lh.googleusercontent.com/jCln_V8Y_Q0W_xJ_Q0W_xJ_Q0W_xJ_Q0W_xJ_Q0W_xJ_Q0W_xJ_Q0W_xJ.png",
-      "contentLanguage": ["en"]
-    },
-    {
       "id": "animekai",
       "name": "AnimeKai",
       "description": "AnimeKai TV episodes via AnimeKai servers",
@@ -208,7 +196,7 @@
         "tv"
       ],
       "filename": "providers/vidsrc.js",
-      "enabled": true,
+      "enabled": false,
       "logo": "https://vidsrc.xyz/template/vidsrc-ico.png",
       "contentLanguage": [
         "en"
