@@ -585,5 +585,3 @@
   } else {
     global.getStreams = master_getStreams;
   }
-
-})(); // end file
