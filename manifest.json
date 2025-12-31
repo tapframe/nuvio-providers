@@ -219,14 +219,14 @@
     {
       "id": "vixsrc",
       "name": "Vixsrc",
-      "description": "Vixsrc M3U8 streaming with auto quality selection",
-      "version": "1.0.0",
+      "description": "Vixsrc M3U8 streaming with auto quality selection (Modular version)",
+      "version": "1.1.0",
       "author": "Nuvio Team",
       "supportedTypes": [
         "movie",
         "tv"
       ],
-      "filename": "providers/vixsrc.js",
+      "filename": "providers/vixsrc/index.js",
       "enabled": true,
       "logo": "https://vixsrc.to/favicon.ico",
       "contentLanguage": [

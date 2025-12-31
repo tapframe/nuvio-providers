@@ -86,6 +86,113 @@ const WORKING_HEADERS = {
 - Use `cheerio-without-node-native` for HTML parsing
 - Avoid Node.js modules (fs, path, crypto)
 
+### Modular Scrapers (Import Support)
+
+Nuvio supports **importing shared modules** across scrapers, allowing you to:
+- Split large scrapers into smaller, maintainable files
+- Share common utilities across multiple providers
+- Organize code with proper separation of concerns
+
+#### Supported Import Styles
+
+```javascript
+// ES Module Imports
+import { decrypt, encode } from './shared/crypto.js';
+import * as utils from './shared/utils.js';
+import VideoExtractor from './extractors/base.js';
+
+// CommonJS Imports  
+const { decrypt, encode } = require('./shared/crypto.js');
+const utils = require('./shared/utils.js');
+```
+
+#### Example: Modular Provider Structure
+
+```
+repository/
+├── manifest.json
+├── shared/
+│   ├── crypto.js           # Shared encryption utilities
+│   ├── extractors.js       # Common video extractors
+│   └── utils.js            # Helper functions
+└── providers/
+    ├── showbox/
+    │   ├── index.js        # Main entry (referenced in manifest)
+    │   ├── api.js          # API calls
+    │   └── parser.js       # Response parsing
+    └── moviebox/
+        ├── index.js        # Main entry
+        └── helpers.js      # Provider-specific helpers
+```
+
+**manifest.json:**
+```json
+{
+  "scrapers": [
+    {
+      "id": "showbox",
+      "name": "ShowBox",
+      "filename": "providers/showbox/index.js",
+      "supportedTypes": ["movie", "tv"]
+    }
+  ]
+}
+```
+
+**providers/showbox/index.js:**
+```javascript
+import { decrypt } from '../../shared/crypto.js';
+import { fetchData } from './api.js';
+import { parseStreams } from './parser.js';
+
+function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+  return new Promise((resolve, reject) => {
+    fetchData(tmdbId, mediaType, seasonNum, episodeNum)
+      .then(data => decrypt(data))
+      .then(decrypted => parseStreams(decrypted))
+      .then(streams => resolve(streams))
+      .catch(error => {
+        console.error('[ShowBox] Error:', error);
+        resolve([]);
+      });
+  });
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { getStreams };
+} else {
+  global.getStreams = getStreams;
+}
+```
+
+**shared/crypto.js:**
+```javascript
+export function decrypt(data) {
+  // Decryption logic
+  return decryptedData;
+}
+
+export function encode(str) {
+  // Encoding logic
+  return encodedStr;
+}
+```
+
+#### How It Works
+
+1. When Nuvio downloads your scraper, it automatically detects `import`/`require` statements
+2. Referenced files are downloaded from your repository
+3. Imports are recursively resolved (nested imports work too!)
+4. All modules are bundled together before execution
+5. Circular imports are detected and handled gracefully
+
+#### Import Rules
+
+- ✅ **Relative imports only**: `./file.js`, `../shared/utils.js`
+- ✅ **Built-in modules**: `crypto-js`, `cheerio-without-node-native`
+- ❌ **Absolute URLs**: Not supported
+- ❌ **Node.js modules**: `fs`, `path`, etc. are not available
+
 ### Testing
 Create a test file to verify your scraper (see existing scrapers for examples):
 
